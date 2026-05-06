@@ -328,7 +328,7 @@ The exact module signatures will evolve, but the public surface intent is:
 - **sources**: id, project_id, type, title, original_uri, cached_content_ref, summary, embedding_doc_ref, first_seen_at, last_referenced_at
 - **sessions**: id, project_id, target_article_id (nullable), start_at, end_at, audio_ref, transcript_ref, consolidation_status, summary
 - **open_questions**: id, project_id, text, opened_at, resolved_at (nullable), resolution_note, true_line_section_ref
-- **inbox_items**: id, raw_content_ref, type, status (captured | triaged-auto | triaged-pending | filed | stale), proposed_project_id, agent_reasoning, deposited_at, triaged_at, filed_at
+- **inbox_items**: id, raw_content_ref, type, status (captured | triage-failed | triaged-auto | triaged-pending | filed | stale), proposed_project_id, agent_reasoning, deposited_at, triaged_at, filed_at
 - **true_line_versions**: project_id, version, content_ref, source_session_id, committed_at
 - **embeddings**: source_chunk_id, project_id, source_id, embedding, content (denormalized)
 

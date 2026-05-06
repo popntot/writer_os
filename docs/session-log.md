@@ -4,6 +4,40 @@ Reverse-chronological log of work shipped across sessions. Each entry: what got 
 
 ---
 
+## 2026-05-06 (session 3) — Module interface depth review (4 high-priority modules)
+
+**Shipped:**
+
+- Locked the public interfaces of the four high-priority backend modules per Ousterhout depth checks. Each module gets its own doc under [`docs/interfaces/`](interfaces/) with: domain types, the locked TypeScript-shaped surface, what's hidden, what's deliberately separated, why-each-call-and-not-others, invariants for testing, and deferred items.
+  - [`docs/interfaces/trueline-store.md`](interfaces/trueline-store.md) — added `listVersions`, `contributionSummary` field on writes, explicit empty-state semantics (v0 with empty content). Whole-document replacement, no patches at MVP. Section parsing and citation indexing kept *out* of the store.
+  - [`docs/interfaces/consolidation-worker.md`](interfaces/consolidation-worker.md) — `enqueue` + `getStatus` + `retry` + `processSession` (the last is the testable work fn). Status as tagged union with strict transitions. Race handling lives in ConversationOrchestrator, not here. Result returns refs, not content.
+  - [`docs/interfaces/inbox-triage-engine.md`](interfaces/inbox-triage-engine.md) — `triage(itemId) → TriageProposal` renamed to `triageItem(itemId) → TriageDecision` (decision encompasses the action already taken in auto-file cases). Per-item `markStale` replaced with `runStaleSweep(now)` + sibling `runAuditWindowSweep(now)`. `confirmDestination` collapses three user actions (accept / override / reject-during-audit). Added `recoverFromStale`.
+  - [`docs/interfaces/source-ingestion-pipeline.md`](interfaces/source-ingestion-pipeline.md) — minimal two-method surface (`ingest` + `getProcessedSource`); type-specific processing branches internally. Sources row created at ingest with `project_id = null`; InboxTriageEngine populates project at file/auto-file. No queue here — the inbox engine owns that.
+- `RawContent` aligned across InboxTriageEngine and SourceIngestionPipeline (one shared union; book-reference type included so it routes through the single deposit pathway per PRD §"Inbox triage" line 215).
+- New feedback memory saved at the per-project memory dir: **UI/branding deferred — functional core first**. Will explicitly directed: stand up a build that tests core functionality, then layer design later. Memory enforces "no styling/branding/look-and-feel proposals until the design phase is signaled."
+
+**PRD schema delta surfaced (action item, not yet applied):**
+
+- Add `triage-failed` to the `inbox_items.status` enum (PRD §"Schema sketch" line 331). Rationale: parallels ConsolidationWorker's failed state, gives OutOfSyncDetector a clean signal for triage-stuck items, avoids overloading `captured` with both "ingestion-in-flight" and "triage-attempts-exhausted" semantics. Apply in next housekeeping commit to `docs/prd.md`.
+
+**Next session pickup, in order** (carries forward; item 2 from session 2 now done):
+
+1. ~~Module interface depth review~~ ✅ done (this session, 4 docs in `docs/interfaces/`).
+2. **PRD schema delta** — apply the `triage-failed` status addition to `docs/prd.md` schema sketch.
+3. **`/to-issues`** — slice issue #1 into tracer-bullet vertical-slice issues, AFK-ready. Each issue can now reference a locked interface doc as the API contract.
+4. **Sandcastle harness setup** — `.sandcastle/` config (Dockerfile, prompt.md, main.ts), AGENTS.md expansion with deep-module rules + AFK escalation rules + reference to all four ADRs. Reference `docs/interfaces/` as the locked-API source.
+5. **Account/key provisioning** — Cloudflare, Supabase, Anthropic, ElevenLabs accounts; secrets storage (1Password CLI recommended). Install `op` then.
+6. **First package scaffolding** — Turborepo + pnpm monorepo skeleton, `packages/shared-types` first (lift the locked interfaces in from `docs/interfaces/` as real `.ts`), then first vertical slice picked up by Sandcastle. `/tdd` discipline (red-green-refactor) applies inside Sandcastle per issue.
+
+**Open threads / things to remember:**
+
+- Will's standing instruction this session: keep UI light; no styling/branding/look-and-feel work until core functionality stands. Saved as feedback memory in the per-project memory dir.
+- The locked interfaces are documentation, not code yet. They become `.ts` in `packages/shared-types` when the monorepo lands. Keep them in sync if either side moves first.
+- The other 14 modules (Medium / Low priority per PRD §"Modules") are *not* yet depth-reviewed. They can be reviewed lazily — at issue-creation time per slice — rather than upfront.
+- All open threads from sessions 1 + 2 still apply.
+
+---
+
 ## 2026-05-06 (session 2) — Second-machine onboarding; PRD published to tracker
 
 **Shipped:**
