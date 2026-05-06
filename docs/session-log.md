@@ -14,14 +14,19 @@ Reverse-chronological log of work shipped across sessions. Each entry: what got 
 - Created the four canonical triage labels on the GitHub repo (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`) — `docs/agents/triage-labels.md` referenced them but they weren't yet provisioned.
 - Published the PRD as **GitHub issue #1** with `needs-triage` label: https://github.com/popntot/writer_os/issues/1. Issue body mirrors `docs/prd.md` with a preamble noting the canonical doc is the source of truth and PR amendments are the way to update.
 
-**Next session pickup, in order** (carries forward from session 1, item 1 now done):
+**Next session pickup, in order** (carries forward from session 1, items 1 and 3 now done):
 
 1. ~~`/to-prd` — publish PRD to tracker~~ ✅ done (issue #1)
-2. **`/to-issues`** — slice issue #1 into tracer-bullet vertical-slice issues, AFK-ready
-3. **ADRs** — write the four ADR candidates (start with `ADR-0001: Mentor neutrality (craft, not ideology)`)
-4. **Sandcastle harness setup** — `.sandcastle/` config (Dockerfile, prompt.md, main.ts), AGENTS.md expansion with deep-module rules + AFK escalation rules
-5. **Account/key provisioning** — Cloudflare, Supabase, Anthropic, ElevenLabs accounts; secrets storage (1Password CLI recommended). Install `op` then.
-6. **First package scaffolding** — Turborepo + pnpm monorepo skeleton, then first vertical slice picked up by Sandcastle
+2. **Module interface depth review** — validate the PRD's 18 modules (especially the 4 high-priority: TrueLineStore, ConsolidationWorker, InboxTriageEngine, SourceIngestionPipeline) actually express deep modules per Ousterhout. Use `/design-an-interface` per module or a manual interface review. Lock concrete TypeScript signatures into `packages/shared-types` later.
+3. **`/to-issues`** — slice issue #1 into tracer-bullet vertical-slice issues, AFK-ready (run AFTER interface review so each issue can reference a locked interface).
+4. ~~ADRs~~ ✅ done (commits `05e3444`, `2ac0fe4`, `f7e5550`, `49d931f`):
+   - ADR-0001 Mentor neutrality (craft, not ideology)
+   - ADR-0002 Pipelined voice stack over realtime voice APIs
+   - ADR-0003 Cloud-first hybrid storage with document-shaped agent layer
+   - ADR-0004 One source of truth + interface projection
+5. **Sandcastle harness setup** — `.sandcastle/` config (Dockerfile, prompt.md, main.ts), AGENTS.md expansion with deep-module rules + AFK escalation rules + reference to all four ADRs.
+6. **Account/key provisioning** — Cloudflare, Supabase, Anthropic, ElevenLabs accounts; secrets storage (1Password CLI recommended). Install `op` then.
+7. **First package scaffolding** — Turborepo + pnpm monorepo skeleton, then first vertical slice picked up by Sandcastle. `/tdd` discipline (red-green-refactor) applies inside Sandcastle per issue.
 
 **Open threads / things to remember:**
 
