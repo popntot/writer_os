@@ -4,6 +4,38 @@ Reverse-chronological log of work shipped across sessions. Each entry: what got 
 
 ---
 
+## 2026-05-06 (session 3, continued) — `/to-issues`: 22 vertical slices opened
+
+**Shipped:**
+
+- Sliced issue #1 (the PRD) into **22 tracer-bullet issues** (#2–#23) on `popntot/writer_os`. Dependency-ordered, labeled `ready-for-agent` (19) or `ready-for-human` (3).
+- Critical path to v0.1 walk-loop validation: **#2 + #3 → #4 → #5 → #6 → #7 → #8 + #9 → #10**. Everything after #10 (the real-walk smoke test gate) is accretion gated on a GO call.
+- Three HITL gates: **#2** (account/key provisioning — must happen before anything that needs keys), **#10** (real-walk smoke test — GO/NO-GO before pouring effort into accretion), **#23** (Apple Dev enrollment + first ITC submission).
+- Notable structural calls baked into the slicing:
+  - **Slice 4 (#7) writes a hardcoded TrueLine delta**, then slice 6 (#9) replaces it with real LLM consolidation. Separates spine plumbing from LLM consolidation; lets either fail in isolation.
+  - **Slice 5 (voice loop, #8) lands BEFORE slice 6 (real consolidation, #9)**. Voice tested against a stable hardcoded spine; LLM consolidation tested against a stable voice loop. Highest-uncertainty surface (Apple Speech outdoors) flushed out first.
+  - **Slice 8 (#11) ships Inbox with stubbed triage**, then slice 9 (#12) swaps in real LLM. Inbox state machine + ingestion plumbing land deterministically before LLM dependency.
+  - **Slice 10 (#10) is a GO/NO-GO gate** — Will does one real walk, posts notes; if NO-GO, fix the failing slice before any accretion. Prevents pouring effort into inbox/sources on top of a broken core loop.
+  - **Ingestion ordered PDF → voice-memo → URL** (slices 10 → 11 → 12 = #13 → #14 → #15) — easiest to messiest, parallelizable since they only share blocker #12.
+  - **Slice 14 (#17, ArtifactGenerator)** triggers a module-interface depth review for ArtifactGenerator before implementation, parallel to the four high-priority locks shipped in the previous commit.
+- Auth + migrations pinned in slice 2a (#4): shared-secret bearer token at MVP (magic-link deferred to Phase 1.5 web), Drizzle ORM as the migration tool. PRD glossed both — locked in slicing instead.
+
+**Next session pickup, in order:**
+
+1. **#2 (account/key provisioning) — Will.** Hard gate: nothing AFK can run without these.
+2. **#3 (Sandcastle harness + AGENTS.md expansion) — bootstrappable in parallel with #2.** Once #3 lands, all other AFK slices route through the harness.
+3. After #2 + #3 land: **#4 → #5 → #6 → #7 → #8 + #9** runs as a serial AFK chain to the smoke-test gate.
+4. Then **#10 (smoke test) — Will.** Real walk, real device, GO/NO-GO documented in the issue.
+5. After GO: parallel AFK fan-out across the accretion slices.
+
+**Open threads / things to remember:**
+
+- 22 issues opened means 22 PR cycles to land v0.1. Prioritize PR review velocity — bottleneck on Claude-reviewing-Codex output is more likely than Codex throughput.
+- ArtifactGenerator interface lock (#17) is the only remaining depth review needed; the other 13 medium/low-priority modules can be reviewed lazily at issue-claim time.
+- All open threads from sessions 1 + 2 still apply.
+
+---
+
 ## 2026-05-06 (session 3) — Module interface depth review (4 high-priority modules)
 
 **Shipped:**
