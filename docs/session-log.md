@@ -4,6 +4,33 @@ Reverse-chronological log of work shipped across sessions. Each entry: what got 
 
 ---
 
+## 2026-05-06 (session 2) — Second-machine onboarding; PRD published to tracker
+
+**Shipped:**
+
+- Onboarded a second dev Mac (`/Users/williamgreen` user). Repo cloned to `~/Code/writer_os` per onboarding doc (NOT iCloud). `gh` auth verified on `popntot` account via SSH.
+- Cross-machine dev tools surveyed: `git 2.50.1`, `gh 2.90.0`, `node 20.17.0`, `pnpm 10.33.2`, `swift 6.3.1`, `xcodebuild`, `rsync` all present. Deferred per plan: `wrangler`, `supabase` CLI, `turbo`, `op` (1Password CLI).
+- Fixed broken `pnpm` resolution on the second machine: corepack-shipped shim at `/usr/local/bin/pnpm` was failing with `Cannot find matching keyid` (corepack 0.29.3 keyset out of date), and the standalone `pnpm` install at `~/Library/pnpm/pnpm` was being shadowed because the `.zshrc` `case` block skipped re-prepending `$PNPM_HOME` when it was already on PATH. Replaced with an unconditional prepend so the working pnpm wins lookup. Note for Will: if the **other** Mac has the same Node 20.17 + `~/Library/pnpm` setup and `pnpm --version` errors with that keyid message, apply the same `.zshrc` fix.
+- Created the four canonical triage labels on the GitHub repo (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`) — `docs/agents/triage-labels.md` referenced them but they weren't yet provisioned.
+- Published the PRD as **GitHub issue #1** with `needs-triage` label: https://github.com/popntot/writer_os/issues/1. Issue body mirrors `docs/prd.md` with a preamble noting the canonical doc is the source of truth and PR amendments are the way to update.
+
+**Next session pickup, in order** (carries forward from session 1, item 1 now done):
+
+1. ~~`/to-prd` — publish PRD to tracker~~ ✅ done (issue #1)
+2. **`/to-issues`** — slice issue #1 into tracer-bullet vertical-slice issues, AFK-ready
+3. **ADRs** — write the four ADR candidates (start with `ADR-0001: Mentor neutrality (craft, not ideology)`)
+4. **Sandcastle harness setup** — `.sandcastle/` config (Dockerfile, prompt.md, main.ts), AGENTS.md expansion with deep-module rules + AFK escalation rules
+5. **Account/key provisioning** — Cloudflare, Supabase, Anthropic, ElevenLabs accounts; secrets storage (1Password CLI recommended). Install `op` then.
+6. **First package scaffolding** — Turborepo + pnpm monorepo skeleton, then first vertical slice picked up by Sandcastle
+
+**Open threads / things to remember:**
+
+- Corepack shim at `/usr/local/bin/pnpm` is still present but shadowed; harmless. To remove: `sudo rm /usr/local/bin/pnpm` from a real terminal.
+- Memory pointer for Writer OS lives at the home-level memory dir on this Mac (`~/.claude/projects/-Users-williamgreen/memory/project_writer_os.md`) so it loads in any Claude Code session. Per-project memory will accumulate at `~/.claude/projects/-Users-williamgreen-Code-writer_os/memory/` once Claude Code is launched from inside the project dir.
+- All other open threads from session 1 still apply (AGENTS.md expansion before Sandcastle, pre-commit hooks deferred, CI deferred, Apple Speech outdoor quality testing, Mentor ADR-0001).
+
+---
+
 ## 2026-05-06 — Foundation: PRD, agent substrate, repo scaffolding
 
 **Shipped:**
