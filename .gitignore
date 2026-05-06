@@ -1,0 +1,41 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Node / pnpm
+node_modules/
+.pnpm-store/
+.turbo/
+dist/
+build/
+.next/
+out/
+
+# iOS / Xcode
+DerivedData/
+*.xcuserstate
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+Pods/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*~
+
+# Claude Code (user-local settings)
+.claude/settings.local.json
+
+# Sandcastle
+.sandcastle/.env
+.sandcastle/logs/
