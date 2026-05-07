@@ -4,6 +4,43 @@ Reverse-chronological log of work shipped across sessions. Each entry: what got 
 
 ---
 
+## 2026-05-07 (session 4) — Issue #5 shipped (PR #25 merged); first iPhone tracer green
+
+**Shipped:**
+
+- PR #25 merged as `245d51f` (squash-merge, branch deleted). Issue #5 closed.
+- HITL portion completed end-to-end: dev-provisioned install on Will's iPhone, app configured against the live Worker, real project created from iPhone landed in Supabase, list view round-tripped. Both AC #3 (device install) and AC #4 (round-trip) ticked.
+- Two backend bugs surfaced and fix-forwarded into PR #25 (matches harness "fix forward in branch" pattern from `docs/agents/harness.md`):
+  - **CF Worker I/O isolation crash on POST.** The cached `{ db, app }` pattern from PR #24 worked under PGlite tests but failed against real postgres-js TCP in Workers ("Cannot perform I/O on behalf of a different request"). Fix: `createNodeClient` now returns `{ db, close }` (mirrors PgliteHandle); Worker `fetch` builds db + app per request and schedules `handle.close()` via `ctx.waitUntil`. Verified with curl + iPhone round-trip. Commit `34f6e04`.
+  - **wrangler dev bound to localhost.** Default binding made the Worker unreachable from devices on the LAN, blocking PR #25's Step 2 by construction. Fix: `wrangler dev --ip 0.0.0.0` in `apps/api/package.json` dev script. Commit `5658dcd`.
+- `.gitignore`: added `.wrangler/` (local cache dir, not needed in tree).
+
+**Harness validation note (carry-forward):**
+
+PGlite-backed integration tests cannot catch real-socket bugs in postgres-js — they pass with stale code that crashes against real Postgres in Workers. The test pyramid for the API layer has a gap at the "real connection lifecycle" boundary. Worth tracking as an open consideration for the test strategy: testcontainers-postgres or an ephemeral Supabase per-CI-run would close it. Not yet an issue.
+
+**Open data note:**
+
+Three test rows live in the dev Supabase from this session (2 curl smoke tests + 1 from-iPhone). Not deleted — the API has no DELETE endpoint yet, the dev DB will likely get re-shaped by future schema changes anyway, and a one-off psql call wasn't worth the ceremony. Wipe later via a sensible CRUD slice or a one-off script if it matters.
+
+**Next session pickup, in order:**
+
+1. **#6 — LLMClient + text-turn** (AFK, blocked by #5 — now unblocked). **Critical paid-key blocker:** Anthropic API prepay $30–50, auto-refill OFF, **before** #6 starts. Console: https://console.anthropic.com/. Per the paid-key operating model, this is the first Anthropic-key blocker — Will should provision the credits in parallel with #6 planning so the AFK chain doesn't stall.
+2. **#7 — TrueLineStore + hardcoded delta** (AFK, blocked by #6).
+3. **#8 — voice loop** (AFK, blocked by #7). Second paid-key blocker: ElevenLabs prepay $20–30.
+4. **#9 — ConsolidationWorker** (AFK, blocked by #7).
+5. **#10 — Real-walk smoke test (HITL GO/NO-GO).**
+
+**Open threads / things to remember:**
+
+- Mac LAN IP for iPhone testing: `192.168.1.252` (current Wi-Fi). Will change with network changes — re-check via `ipconfig getifaddr en1` (note: `en1` on this Mac, not `en0`).
+- Worker is no longer running; restart with `pnpm api:dev` when needed.
+- Supabase dev DB: project ref `ktmkwljfmyynjnlyvqhd`. `DATABASE_URL` lives in `apps/api/.dev.vars` (gitignored).
+- The DB password Will pasted into `.dev.vars` was visible in this Claude Code session's transcript via system reminder. Low practical risk (transcript is local), but a defensible-paranoia move would be: rotate the password in Supabase (Project Settings → Database → Reset password) and update `.dev.vars`. Decide based on threat model.
+- All open threads from earlier sessions still apply.
+
+---
+
 ## 2026-05-06 (session 3, end) — Issue #5 in flight (PR #25); session paused
 
 **Shipped today (sessions 3 + 3 continued):**

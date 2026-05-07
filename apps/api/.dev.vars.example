@@ -8,3 +8,8 @@ WRITER_OS_API_SECRET="dev-secret-change-me"
 # this is unused; for deployed Worker hitting Supabase, set to the pooled
 # connection URL (Supabase project settings → Database → Connection pooling).
 DATABASE_URL=""
+
+# Anthropic API key — used by LLMClient (slice #6 onward).
+# Get one at https://console.anthropic.com/. Buy prepaid credits with
+# auto-refill OFF as a hard cap on spend. Format: sk-ant-api03-...
+ANTHROPIC_API_KEY=""
