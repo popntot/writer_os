@@ -15,18 +15,21 @@ export function createApp(db: AppDatabase): Hono<{ Bindings: Env }> {
   return app;
 }
 
-let cached: { db: AppDatabase; app: Hono<{ Bindings: Env }> } | null = null;
-
 export default {
   async fetch(
     request: Request,
     env: Env,
-    _ctx: ExecutionContext,
+    ctx: ExecutionContext,
   ): Promise<Response> {
-    if (cached === null) {
-      const db = createDbForWorker(env);
-      cached = { db, app: createApp(db) };
+    // postgres-js TCP sockets are pinned to the request that opened them in
+    // Cloudflare Workers, so we build the DB client + Hono app per request
+    // and schedule connection cleanup via waitUntil.
+    const handle = createDbForWorker(env);
+    const app = createApp(handle.db);
+    try {
+      return await app.fetch(request, env);
+    } finally {
+      ctx.waitUntil(handle.close());
     }
-    return cached.app.fetch(request, env);
   },
 };

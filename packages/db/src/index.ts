@@ -3,6 +3,7 @@ export type { Project, NewProject } from "./schema.js";
 export {
   createNodeClient,
   type Database,
+  type NodeHandle,
 } from "./client-node.js";
 export {
   createPgliteClient,
