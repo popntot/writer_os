@@ -4,6 +4,47 @@ Reverse-chronological log of work shipped across sessions. Each entry: what got 
 
 ---
 
+## 2026-05-06 (session 3, end) — Issue #5 in flight (PR #25); session paused
+
+**Shipped today (sessions 3 + 3 continued):**
+
+- ADRs 0001–0004 written
+- `docs/interfaces/` locked for the four high-priority modules (TrueLineStore, ConsolidationWorker, InboxTriageEngine, SourceIngestionPipeline)
+- PRD published as issue #1
+- Sliced PRD into 22 tracer-bullet issues (#2–#23) with phased cost model
+- AGENTS.md + `docs/agents/harness.md` documenting the local Claude Code + Codex CLI parallel-planner-with-review pattern (closed #3)
+- Backend skeleton merged: Turborepo + Worker + Hono + Drizzle + projects CRUD + bearer auth + 7 vitest tests (closed #4 via PR #24)
+- iOS skeleton + APIClient + project list/create open as PR #25; HITL verification pending
+
+**In flight at session end — PR #25 (issue/5-ios-skeleton):**
+
+- AFK portion done: simulator build green, 3/3 XCTest pass, `pnpm ios:generate / open / test` scripts wired, comprehensive `apps/ios/README.md`
+- HITL portion pending Will:
+  - **AC #3** (first dev-provisioned install on iPhone) — not yet done. Requires: `pnpm ios:open`, set Team in Signing, plug iPhone, ⌘R. Steps in PR #25 description.
+  - **AC #4** (end-to-end round-trip) — blocked on Supabase connection URL not yet in `apps/api/.dev.vars`. Will created a Supabase project (ref: `ktmkwljfmyynjnlyvqhd`); the Transaction pooler URI step in the Connect modal was where we paused for the night.
+
+**Pickup tomorrow, in order:**
+
+1. **Finish PR #25 HITL verification:**
+   - Copy the Transaction pooler URI from Supabase dashboard (Connect → Direct → Transaction pooler → URI). Replace `[YOUR-PASSWORD]` with the actual DB password.
+   - Edit `apps/api/.dev.vars` (gitignored): set `DATABASE_URL` and `WRITER_OS_API_SECRET`.
+   - Run `DATABASE_URL="$(grep DATABASE_URL apps/api/.dev.vars | cut -d'"' -f2)" pnpm db:migrate` — applies the projects table to Supabase.
+   - Run `pnpm api:dev` (Worker on http://localhost:8787).
+   - In another terminal: `pnpm ios:generate && pnpm ios:open`. Set Team in Signing → ⌘R to install on iPhone. Trust dev cert in iPhone Settings.
+   - In iOS app's setup screen: enter `http://<Mac's local IP>:8787` (find via `ipconfig getifaddr en0`) + `dev-secret-change-me`.
+   - Tap +, create a project, watch it appear. Tick AC checkboxes. Merge PR #25.
+2. **#6 — LLMClient + text-turn** (AFK, unblocks after PR #25 merges). **First Anthropic API blocker** — prepay $30–50 with auto-refill OFF at https://console.anthropic.com/ before #6 starts.
+
+**Open threads / things to remember:**
+
+- Supabase project ref `ktmkwljfmyynjnlyvqhd` is Will's dev DB. Free tier, no card on file.
+- The pooler URI contains the DB password — never paste in chat, only into `apps/api/.dev.vars` (gitignored).
+- The Worker requires `DATABASE_URL` reachable for `/projects` endpoints to work. `/health` works regardless.
+- Branch `issue/5-ios-skeleton` is checked out locally; PR #25 open.
+- All open threads from earlier sessions still apply.
+
+---
+
 ## 2026-05-06 (session 3, continued) — Issue #4 shipped: backend skeleton (PR #24 merged)
 
 **Shipped:**
