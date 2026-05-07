@@ -1,0 +1,59 @@
+name: WriterOS
+options:
+  bundleIdPrefix: com.popntot
+  deploymentTarget:
+    iOS: "17.0"
+  developmentLanguage: en
+  xcodeVersion: "26.0"
+  groupSortPosition: top
+settings:
+  base:
+    SWIFT_VERSION: "5.10"
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    GENERATE_INFOPLIST_FILE: YES
+    SWIFT_STRICT_CONCURRENCY: complete
+configs:
+  Debug: debug
+  Release: release
+targets:
+  WriterOS:
+    type: application
+    platform: iOS
+    sources:
+      - path: WriterOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.popntot.WriterOS
+        INFOPLIST_KEY_CFBundleDisplayName: Writer OS
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UIRequiresFullScreen: NO
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait"
+        # Signing — to be configured by Will in Xcode UI on first device run.
+        # Automatic signing with his Personal Team works for dev installs.
+        CODE_SIGN_STYLE: Automatic
+        # DEVELOPMENT_TEAM is left blank intentionally; Will sets it once via
+        # Xcode → Project → Signing & Capabilities → Team dropdown.
+  WriterOSTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: WriterOSTests
+    dependencies:
+      - target: WriterOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.popntot.WriterOS.Tests
+schemes:
+  WriterOS:
+    build:
+      targets:
+        WriterOS: all
+        WriterOSTests: [test]
+    test:
+      targets:
+        - WriterOSTests
+    run:
+      config: Debug
+    archive:
+      config: Release

@@ -1,0 +1,87 @@
+import Foundation
+
+enum APIError: Error, LocalizedError {
+    case invalidResponse
+    case unauthorized
+    case badRequest(String)
+    case server(Int, String)
+    case transport(Error)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidResponse: return "Server returned an invalid response."
+        case .unauthorized: return "Unauthorized. Check the API secret."
+        case .badRequest(let message): return message
+        case .server(let status, let message): return "Server error (\(status)): \(message)"
+        case .transport(let error): return error.localizedDescription
+        }
+    }
+}
+
+actor APIClient {
+    private let config: AppConfig
+    private let session: URLSession
+
+    init(config: AppConfig, session: URLSession = .shared) {
+        self.config = config
+        self.session = session
+    }
+
+    func listProjects() async throws -> [Project] {
+        let request = makeRequest(path: "/projects", method: "GET")
+        let (data, response) = try await perform(request)
+        try Self.assertStatus(response, expected: 200, data: data)
+        return try JSONDecoder().decode([Project].self, from: data)
+    }
+
+    func createProject(title: String, type: String?) async throws -> Project {
+        var request = makeRequest(path: "/projects", method: "POST")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body = CreateProjectRequest(title: title, type: type)
+        request.httpBody = try JSONEncoder().encode(body)
+        let (data, response) = try await perform(request)
+        try Self.assertStatus(response, expected: 201, data: data)
+        return try JSONDecoder().decode(Project.self, from: data)
+    }
+
+    func health() async throws {
+        let url = config.apiBaseURL.appendingPathComponent("/health")
+        let request = URLRequest(url: url)
+        let (data, response) = try await perform(request)
+        try Self.assertStatus(response, expected: 200, data: data)
+    }
+
+    private func makeRequest(path: String, method: String) -> URLRequest {
+        var url = config.apiBaseURL
+        url.append(path: path)
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.setValue("Bearer \(config.apiSecret)", forHTTPHeaderField: "Authorization")
+        return request
+    }
+
+    private func perform(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        do {
+            return try await session.data(for: request)
+        } catch {
+            throw APIError.transport(error)
+        }
+    }
+
+    private static func assertStatus(_ response: URLResponse, expected: Int, data: Data) throws {
+        guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
+        if http.statusCode == expected { return }
+        if http.statusCode == 401 { throw APIError.unauthorized }
+        let message = decodeErrorMessage(from: data)
+        if http.statusCode == 400 { throw APIError.badRequest(message) }
+        throw APIError.server(http.statusCode, message)
+    }
+
+    private static func decodeErrorMessage(from data: Data) -> String {
+        struct ErrorBody: Decodable { let error: String }
+        if let body = try? JSONDecoder().decode(ErrorBody.self, from: data) {
+            return body.error
+        }
+        return String(data: data, encoding: .utf8) ?? "<no body>"
+    }
+}

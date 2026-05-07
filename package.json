@@ -16,7 +16,10 @@
     "dev": "turbo run dev",
     "db:generate": "pnpm --filter @writer-os/db db:generate",
     "db:migrate": "pnpm --filter @writer-os/db db:migrate",
-    "api:dev": "pnpm --filter @writer-os/api dev"
+    "api:dev": "pnpm --filter @writer-os/api dev",
+    "ios:generate": "cd apps/ios && xcodegen generate",
+    "ios:open": "open apps/ios/WriterOS.xcodeproj",
+    "ios:test": "cd apps/ios && xcodebuild -project WriterOS.xcodeproj -scheme WriterOS -destination 'platform=iOS Simulator,name=iPhone 17,OS=latest' test"
   },
   "devDependencies": {
     "turbo": "^2.3.0",
