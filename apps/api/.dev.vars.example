@@ -1,0 +1,10 @@
+# Copy to .dev.vars (gitignored) and fill in values for local `wrangler dev`.
+# Production values are set via `wrangler secret put`.
+
+# Bearer-secret for the API. Any string; share between API and clients.
+WRITER_OS_API_SECRET="dev-secret-change-me"
+
+# Postgres connection string. For local dev with PGlite-backed Worker tests
+# this is unused; for deployed Worker hitting Supabase, set to the pooled
+# connection URL (Supabase project settings → Database → Connection pooling).
+DATABASE_URL=""
