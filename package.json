@@ -1,0 +1,26 @@
+{
+  "name": "writer-os",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Voice-first thinking partner for writers — monorepo root.",
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=10"
+  },
+  "packageManager": "pnpm@10.33.2",
+  "scripts": {
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "dev": "turbo run dev",
+    "db:generate": "pnpm --filter @writer-os/db db:generate",
+    "db:migrate": "pnpm --filter @writer-os/db db:migrate",
+    "api:dev": "pnpm --filter @writer-os/api dev"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.0",
+    "typescript": "^5.6.0",
+    "@types/node": "^22.0.0"
+  }
+}

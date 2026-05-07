@@ -1,0 +1,11 @@
+name = "writer-os-api"
+main = "src/index.ts"
+compatibility_date = "2025-04-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Local dev environment. Production secrets are set via `wrangler secret put`.
+[vars]
+ENVIRONMENT = "development"
+
+# DATABASE_URL and WRITER_OS_API_SECRET are set as secrets, not vars.
+# Locally they live in `.dev.vars` (gitignored) — see apps/api/README.md.
