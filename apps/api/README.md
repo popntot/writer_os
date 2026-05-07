@@ -9,7 +9,7 @@ Local dev uses `wrangler dev` against either a local Postgres (Supabase started 
 ```sh
 # Set local secrets
 cp .dev.vars.example .dev.vars
-# Fill in WRITER_OS_API_SECRET (any string) and DATABASE_URL (Supabase connection URL)
+# Fill in the values per the comments in the file.
 
 # Run the Worker locally
 pnpm dev
