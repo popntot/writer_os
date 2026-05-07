@@ -4,6 +4,47 @@ Reverse-chronological log of work shipped across sessions. Each entry: what got 
 
 ---
 
+## 2026-05-06 (session 3, continued) — Issue #3 shipped (local harness wired); cost model phased
+
+**Shipped:**
+
+- Closed issue #3 (Foundations 1b: harness + AGENTS expansion). Local Claude Code + Codex CLI parallel-planner-with-review harness is live. Codex CLI verified ready (`codex-cli 0.125.0`, ChatGPT auth active).
+- AGENTS.md expanded with: read-before-working ordered list, build harness section, ADR + `docs/interfaces/` references, PR conventions, UI/branding standing instruction, deep-modules rule strengthened (lock-interface-first for un-locked modules), **AFK escalation rules**, **paid-key blockers** policy.
+- New `docs/agents/harness.md` documents the local pattern: roles, pre-flight, normal cycle, escalation triggers, cost model, what the harness does NOT do at MVP.
+- Cost model reframed into 3 phases (constraint: Will runs sub-funded by default, prepays one-time API credits when needed, defers cloud AFK to Phase C):
+  - **Phase A (now, ~$0)**: subs + free tiers. Buildable: #4, #5, #7. No paid keys needed.
+  - **Phase B (when first ~$50 prepay arrives)**: Anthropic API prepay unlocks #6 onward; ElevenLabs prepay unlocks #8. v0.1 walk-test reachable here.
+  - **Phase C (post-#10 GO, ~$50–200/mo)**: cloud Sandcastle for true 24/7 AFK. Deferred until smoke test validates the product.
+- Slice #3's original cloud-Sandcastle AC was rescoped to the local harness equivalent. Deferred deliverables (`.sandcastle/` Dockerfile + prompt.md + main.ts, deployment template) deferred to a new Phase C issue when greenlit.
+
+**Paid-key blocker schedule (will be flagged in advance by Claude Code):**
+
+| Trigger slice | What to provision | One-time prepay |
+|---|---|---|
+| #5 (iOS dev install) | Apple Developer enrollment | $99/yr fixed |
+| **#6 (LLMClient)** | Anthropic API key + prepay credits | **$30–50** |
+| #8 (voice loop) | ElevenLabs API + prepay | $20–30 |
+| Mid-build (TBD) | Cloudflare Workers paid ($5/mo) — only if free tier exhausts | $5/mo |
+| Mid-build (TBD) | Supabase Pro ($25/mo) — likely needed at #11 (pgvector at scale) | $25/mo |
+
+**Next session pickup, in order:**
+
+1. **#4 — Foundations 2a: backend skeleton** (AFK, sub-funded). First Codex-implemented slice. Critical-path dependency for everything else. No paid keys needed.
+2. **#5 — Foundations 2b: iOS skeleton + first dev install** (AFK, blocked by #4). First paid dependency: Apple Developer enrollment ($99/yr). Lead time 24–48h for Apple to approve, so Will should start the enrollment process around the time #4 lands.
+3. **#6 — LLMClient + text-turn** (AFK, blocked by #5). **First Anthropic API blocker** — Will needs to prepay $30–50 in Anthropic credits before this slice claims the key.
+4. **#7 — TrueLineStore + hardcoded delta** (AFK, blocked by #6). Spine plumbing; no LLM call.
+5. **#8 — voice loop** (AFK, blocked by #7). **First ElevenLabs blocker** — prepay $20–30 before this slice claims.
+6. **#9 — ConsolidationWorker** (AFK, blocked by #7).
+7. **#10 — Real-walk smoke test (HITL GO/NO-GO)**. After this, Phase C cloud-AFK becomes a justifiable decision.
+
+**Open threads / things to remember:**
+
+- Will's operating model: leverage subs where possible, provision paid keys only when they become hard blockers, Claude Code surfaces upcoming blockers with lead time. Saved as project memory.
+- The local harness requires Will at the keyboard. Truly hands-off overnight runs require Phase C cloud Sandcastle.
+- All open threads from sessions 1 + 2 still apply.
+
+---
+
 ## 2026-05-06 (session 3, continued) — `/to-issues`: 22 vertical slices opened
 
 **Shipped:**
