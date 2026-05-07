@@ -4,6 +4,44 @@ Reverse-chronological log of work shipped across sessions. Each entry: what got 
 
 ---
 
+## 2026-05-06 (session 3, continued) — Issue #4 in flight: backend skeleton (PR #24 open)
+
+**In flight:**
+
+- PR #24 (`feat(api): backend skeleton — Worker + Hono + Drizzle + projects CRUD`, branch `issue/4-backend-skeleton`) — pending Will's review and merge. https://github.com/popntot/writer_os/pull/24
+
+**What landed in the PR:**
+
+- Turborepo + pnpm monorepo skeleton: `apps/api` + `packages/shared-types` + `packages/db`.
+- `apps/api`: Cloudflare Worker on Hono. `GET /health` (public), `GET /projects` and `POST /projects` (bearer-secret auth). Constant-time auth comparison. Cached app instance per Worker.
+- `packages/shared-types`: TypeScript declarations lifted from all 4 locked interface specs (TrueLineStore, ConsolidationWorker, InboxTriageEngine, SourceIngestionPipeline) + shared domain types.
+- `packages/db`: Drizzle schema for `projects`; `createNodeClient` for production (postgres-js); `createPgliteClient` for tests (zero-dep PGlite); `AppDatabase` union type so prod and test share one router code path. Drizzle migration tooling pinned (`pnpm db:generate`, `pnpm db:migrate`).
+- 7 vitest integration tests pass (auth, list, create, validation). `pnpm typecheck` green across all 5 tasks. `pnpm test` green.
+
+**Decisions pinned in slice 2a (PRD glosses now locked):**
+
+- **Auth: shared-secret bearer token.** Header `Authorization: Bearer <WRITER_OS_API_SECRET>`. Magic-link deferred to Phase 1.5 web.
+- **Migrations: Drizzle (drizzle-kit generate + drizzle-orm/migrator runtime).**
+- **Test database: PGlite (Postgres-in-WASM).** Zero external deps; no `supabase` CLI install needed for tests. Production stays on Supabase via `createNodeClient`.
+
+**Harness validation note:**
+
+Codex's first pass produced green tests but with hand-rolled type stubs (`ProjectsTable = object`), dynamic imports of the workspace package, and per-request app construction. Reviewer (Claude Code) rewrote `db.ts`, `routes/projects.ts`, `index.ts`, and `test/projects.test.ts` to use static workspace imports, proper Drizzle types, and a cached app — preserving the 7 passing tests. This is the harness loop working as designed: Codex implements, Claude Code reviews and fixes forward in the same branch (per AGENTS.md). Worth noting for future cycles: budget review-and-rewrite time, especially on the first slice where Codex hasn't internalized the codebase conventions yet.
+
+**Next session pickup, in order:**
+
+1. **Will reviews and merges PR #24.** Once merged, slice #4 closes.
+2. **#5 — Foundations 2b: iOS skeleton + first dev install on Will's iPhone** (AFK, blocked by #4 merge). **First Apple Developer Program enrollment blocker** ($99/yr fixed cost). Apple takes 24–48 hours to approve enrollment — Will should start the enrollment process during PR #24 review so the approval lands in time.
+3. **#6 — LLMClient + text-turn** (AFK, blocked by #5). **First Anthropic API blocker** — prepay $30–50, auto-refill OFF.
+4. #7, #8, #9 — chain to the smoke-test gate.
+
+**Open threads / things to remember:**
+
+- `apps/api` is wired to Supabase but not deployed. Once Will provisions a Supabase project (part of #2 1a), set `DATABASE_URL` via `wrangler secret put` and the Worker connects.
+- All open threads from earlier sessions still apply.
+
+---
+
 ## 2026-05-06 (session 3, continued) — Issue #3 shipped (local harness wired); cost model phased
 
 **Shipped:**
