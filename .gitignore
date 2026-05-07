@@ -20,6 +20,9 @@ build/
 .next/
 out/
 
+# Cloudflare Workers (wrangler local state cache)
+.wrangler/
+
 # iOS / Xcode
 DerivedData/
 *.xcuserstate

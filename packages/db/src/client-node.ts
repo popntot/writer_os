@@ -9,9 +9,19 @@ import * as schema from "./schema.js";
 
 export type Database = PostgresJsDatabase<typeof schema>;
 
-export function createNodeClient(databaseUrl: string): Database {
+export interface NodeHandle {
+  db: Database;
+  close(): Promise<void>;
+}
+
+export function createNodeClient(databaseUrl: string): NodeHandle {
   const client = postgres(databaseUrl, { prepare: false });
-  return drizzle(client, { schema });
+  return {
+    db: drizzle(client, { schema }),
+    close: async () => {
+      await client.end();
+    },
+  };
 }
 
 export { schema };
