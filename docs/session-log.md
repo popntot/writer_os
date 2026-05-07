@@ -4,11 +4,12 @@ Reverse-chronological log of work shipped across sessions. Each entry: what got 
 
 ---
 
-## 2026-05-06 (session 3, continued) — Issue #4 in flight: backend skeleton (PR #24 open)
+## 2026-05-06 (session 3, continued) — Issue #4 shipped: backend skeleton (PR #24 merged)
 
-**In flight:**
+**Shipped:**
 
-- PR #24 (`feat(api): backend skeleton — Worker + Hono + Drizzle + projects CRUD`, branch `issue/4-backend-skeleton`) — pending Will's review and merge. https://github.com/popntot/writer_os/pull/24
+- PR #24 merged as `1c6dc05` (squash-merge, branch deleted). Issue #4 closed.
+- Apple Developer Program enrollment started by Will in parallel ($99/yr, 24–48h Apple processing). Slice #5 (iOS skeleton + first dev install) is unblocked once Apple approval email arrives.
 
 **What landed in the PR:**
 
