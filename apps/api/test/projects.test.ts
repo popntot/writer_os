@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -9,6 +9,7 @@ import {
   test,
 } from "vitest";
 import { createPgliteClient, type PgliteHandle } from "@writer-os/db";
+import type { ChatOptions, ChatResult, LLMClient, LLMStream } from "@writer-os/llm";
 import { createApp } from "../src/index.js";
 import type { Env } from "../src/env.js";
 
@@ -17,6 +18,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const env: Env = {
   WRITER_OS_API_SECRET: "test-secret",
   DATABASE_URL: "postgres://unused",
+  ANTHROPIC_API_KEY: "test-anthropic-key",
   ENVIRONMENT: "test",
 };
 
@@ -31,15 +33,47 @@ function authHeader(secret = env.WRITER_OS_API_SECRET): HeadersInit {
   return { Authorization: `Bearer ${secret}` };
 }
 
+function createFakeLLM(): LLMClient {
+  const result: ChatResult = {
+    text: "unused",
+    usage: {
+      model: "test-model",
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheCreationInputTokens: 0,
+      cacheReadInputTokens: 0,
+      costUsd: 0,
+      durationMs: 0,
+    },
+  };
+
+  return {
+    chat: async (_opts: ChatOptions): Promise<ChatResult> => result,
+    stream: (_opts: ChatOptions): LLMStream => ({
+      done: Promise.resolve(result),
+      async *[Symbol.asyncIterator](): AsyncIterator<string> {
+        yield result.text;
+      },
+    }),
+  };
+}
+
+async function applyMigrations(): Promise<void> {
+  const migrationsDir = resolve(__dirname, "../../../packages/db/src/migrations");
+  const migrationFiles = (await readdir(migrationsDir))
+    .filter((file) => file.endsWith(".sql"))
+    .sort();
+
+  for (const file of migrationFiles) {
+    const migrationSql = await readFile(resolve(migrationsDir, file), "utf8");
+    await handle.pglite.exec(migrationSql);
+  }
+}
+
 beforeAll(async () => {
   handle = await createPgliteClient();
-  const migrationPath = resolve(
-    __dirname,
-    "../../../packages/db/src/migrations/0000_fresh_ravenous.sql",
-  );
-  const migrationSql = await readFile(migrationPath, "utf8");
-  await handle.pglite.exec(migrationSql);
-  app = createApp(handle.db);
+  await applyMigrations();
+  app = createApp(handle.db, createFakeLLM());
 });
 
 afterAll(async () => {

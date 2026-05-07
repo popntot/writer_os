@@ -44,6 +44,35 @@ actor APIClient {
         return try JSONDecoder().decode(Project.self, from: data)
     }
 
+    func createSession(projectId: UUID, targetArticleId: UUID? = nil) async throws -> Session {
+        var request = makeRequest(path: "/projects/\(projectId.uuidString)/sessions", method: "POST")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body = CreateSessionRequest(targetArticleId: targetArticleId)
+        request.httpBody = try JSONEncoder().encode(body)
+        let (data, response) = try await perform(request)
+        try Self.assertStatus(response, expected: 201, data: data)
+        return try JSONDecoder().decode(Session.self, from: data)
+    }
+
+    func sendTurn(sessionId: UUID, message: String) async throws -> TurnResponse {
+        var request = makeRequest(path: "/sessions/\(sessionId.uuidString)/turn", method: "POST")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body = SendTurnRequest(message: message)
+        request.httpBody = try JSONEncoder().encode(body)
+        let (data, response) = try await perform(request)
+        try Self.assertStatus(response, expected: 200, data: data)
+        return try JSONDecoder().decode(TurnResponse.self, from: data)
+    }
+
+    func endSession(sessionId: UUID) async throws -> Session {
+        var request = makeRequest(path: "/sessions/\(sessionId.uuidString)/end", method: "POST")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = "{}".data(using: .utf8)
+        let (data, response) = try await perform(request)
+        try Self.assertStatus(response, expected: 200, data: data)
+        return try JSONDecoder().decode(Session.self, from: data)
+    }
+
     func health() async throws {
         let url = config.apiBaseURL.appendingPathComponent("/health")
         let request = URLRequest(url: url)
@@ -84,4 +113,12 @@ actor APIClient {
         }
         return String(data: data, encoding: .utf8) ?? "<no body>"
     }
+}
+
+private struct CreateSessionRequest: Codable {
+    let targetArticleId: UUID?
+}
+
+private struct SendTurnRequest: Codable {
+    let message: String
 }
