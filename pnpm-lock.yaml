@@ -23,6 +23,9 @@ importers:
       '@writer-os/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@writer-os/llm':
+        specifier: workspace:*
+        version: link:../../packages/llm
       '@writer-os/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types

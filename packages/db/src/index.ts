@@ -1,5 +1,5 @@
 export * as schema from "./schema.js";
-export type { Project, NewProject } from "./schema.js";
+export type { Project, NewProject, Session, NewSession } from "./schema.js";
 export {
   createNodeClient,
   type Database,
