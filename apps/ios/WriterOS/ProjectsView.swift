@@ -58,11 +58,14 @@ struct ProjectsView: View {
                 )
             } else {
                 List(projects) { project in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(project.title).font(.headline)
-                        if let type = project.type, !type.isEmpty {
-                            Text(type).font(.subheadline).foregroundStyle(.secondary)
+                    if let projectId = UUID(uuidString: project.id) {
+                        NavigationLink {
+                            ChatView(projectId: projectId)
+                        } label: {
+                            projectRow(project)
                         }
+                    } else {
+                        projectRow(project)
                     }
                 }
             }
@@ -73,6 +76,15 @@ struct ProjectsView: View {
                 Text(message)
             } actions: {
                 Button("Retry") { Task { await reload() } }
+            }
+        }
+    }
+
+    private func projectRow(_ project: Project) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(project.title).font(.headline)
+            if let type = project.type, !type.isEmpty {
+                Text(type).font(.subheadline).foregroundStyle(.secondary)
             }
         }
     }
