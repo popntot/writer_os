@@ -209,7 +209,25 @@ export function createSessionsRouter(
       return c.json({ error: "session already ended" }, 409);
     }
 
+    // Hardcoded delta: real LLM-driven consolidation lands in #9. This slice
+    // exercises the spine plumbing — TrueLine is read on the next turn's
+    // system prompt, so the round-trip is verifiable end-to-end.
+    //
+    // Write the delta BEFORE marking endAt: if applyDelta fails (e.g. transient
+    // postgres-js error), the session stays open and /end is retryable. The
+    // alternative (endAt-first) would leave the session half-ended on a failed
+    // applyDelta, since the 409 guard then blocks any retry.
     const endedAt = new Date();
+    const current = await trueLineStore.read(session.projectId);
+    const newContent = appendHardcodedDelta(current.content, sessionId, endedAt);
+
+    await trueLineStore.applyDelta({
+      projectId: session.projectId,
+      sourceSessionId: sessionId,
+      newContent,
+      contributionSummary: `Session ${sessionId} ended (hardcoded)`,
+    });
+
     const [updated] = await db
       .update(schema.sessions)
       .set({ endAt: endedAt })
@@ -219,19 +237,6 @@ export function createSessionsRouter(
     if (updated === undefined) {
       return c.json({ error: "session already ended" }, 409);
     }
-
-    // Hardcoded delta: real LLM-driven consolidation lands in #9. This slice
-    // exercises the spine plumbing — TrueLine is read on the next turn's
-    // system prompt, so the round-trip is verifiable end-to-end.
-    const current = await trueLineStore.read(updated.projectId);
-    const newContent = appendHardcodedDelta(current.content, sessionId, endedAt);
-
-    await trueLineStore.applyDelta({
-      projectId: updated.projectId,
-      sourceSessionId: sessionId,
-      newContent,
-      contributionSummary: `Session ${sessionId} ended (hardcoded)`,
-    });
 
     return c.json(serializeSession(updated));
   });
