@@ -7,7 +7,7 @@ This repo runs a **local parallel-planner-with-review harness** at MVP. It is no
 | Role | Tool | Subscription | Responsibilities |
 |---|---|---|---|
 | Planner / Reviewer | Claude Code (Opus 4.7, high effort) | Claude Max | Reads issue, plans approach, drives the slice, reviews Codex output, opens / merges PRs, decides escalations. |
-| Implementer | Codex CLI (GPT-5.4) | Codex Plus | Writes code per a tight scoped prompt, runs tests, surfaces results. |
+| Implementer | Codex CLI (GPT-5.4) | Codex Plus | Writes code per a tight scoped prompt; surfaces the diff. Codex's sandbox has no network, so the reviewer (Claude Code) handles `pnpm install` and test execution. |
 
 Both run on Will's Mac. The harness is local. Production API keys (Anthropic, OpenAI, ElevenLabs) are **only** used by the deployed Worker at runtime — they are not used by the dev harness itself.
 
@@ -37,8 +37,8 @@ For each issue:
 2. **Claude Code plans:** reads the issue, the relevant locked interface(s) in `docs/interfaces/`, the relevant ADRs, the recent session log. Surfaces any concerns or paid-key blockers before delegation.
 3. **Claude Code creates the issue branch:** `git checkout -b issue/<number>-<slug>`.
 4. **Claude Code delegates to Codex via `codex:rescue`** with a tight prompt: the acceptance criteria, the locked interfaces involved, files to touch, and the test commands that must pass.
-5. **Codex implements** — writes code, runs tests, returns the diff and test output.
-6. **Claude Code reviews** the diff against the acceptance criteria. If any criterion is unmet or any escalation trigger fires (see AGENTS.md §"AFK escalation"), Claude Code does NOT auto-merge — it labels the PR `ready-for-human` and stops.
+5. **Codex implements** — writes code and returns the diff. Codex's sandbox is netless: `pnpm install`, `xcodebuild`, and any test that needs network or installed dev-deps cannot run there. Codex may run static checks that work without install, but treat its run as a code-write only.
+6. **Claude Code verifies and reviews** — runs `pnpm install` if dependencies changed, then `pnpm test` and `pnpm typecheck` (and `xcodebuild test` for iOS slices), and reads the diff against the acceptance criteria. If anything fails or any escalation trigger fires (see AGENTS.md §"AFK escalation"), Claude Code does NOT auto-merge — it labels the PR `ready-for-human` and stops, or fix-forwards in the same branch (see below).
 7. **Claude Code commits** (Conventional Commits format), pushes the branch, opens a PR with `Closes #<n>` and the AC checklist mirrored from the issue.
 8. **Will reviews and merges** the PR (or rejects with comments → back to step 4).
 9. **Claude Code updates `docs/session-log.md`** with what shipped and the next pickup.
@@ -70,6 +70,22 @@ Per AGENTS.md §"AFK escalation," label the PR `ready-for-human` and stop instea
 - A slice's "demoable" criterion is impossible without Will (real-device verification, real-walk validation).
 
 When Codex returns a result that fails review, Claude Code's first move is to **fix forward in the same branch** (re-prompt Codex, or take over directly), not to escalate. Escalation is for decisions that need Will, not for code-quality issues.
+
+## Sandbox boundaries
+
+Codex's sandbox has no network access. Concretely:
+
+- `pnpm install` cannot run there → if the slice adds dependencies, Codex writes the `package.json` / `pnpm-lock.yaml` changes and the reviewer runs install.
+- `xcodebuild test` cannot run there → iOS test verification is a reviewer task.
+- Real-API integration tests cannot run there → mocked-SDK tests are the in-sandbox bound; live calls happen at reviewer time or in HITL.
+
+When delegating with `codex:rescue`, give Codex the test commands the reviewer will run, but expect Codex to surface only the diff — not green test output.
+
+## Workspace build dependencies (turbo vs pnpm filter)
+
+When a slice adds a new workspace dependency (e.g. `apps/api` consumes a new `packages/*`), the dependency package must be built before the consuming package's tests can resolve it. `turbo.json`'s `dependsOn: ["^build"]` handles this for `pnpm test` (which goes through turbo), but **not** for `pnpm --filter @writer-os/api test`, which runs the consumer's test script directly without first running the dependency's build.
+
+Practical rule: the first test run after adding a new workspace dep must be `pnpm test` (turbo). Subsequent filtered runs work because the dist artifacts are already on disk.
 
 ## Cost model
 
