@@ -47,7 +47,7 @@ final class APIClientSessionsTests: XCTestCase {
         XCTAssertEqual(session.consolidationStatus, "pending")
     }
 
-    func testSendTurnPostsMessageAndDecodesTurnResponse() async throws {
+    func testStreamTurnPostsMessageAndParsesSSEEvents() async throws {
         let sessionId = UUID(uuidString: "33333333-3333-3333-3333-333333333333")!
 
         StubURLProtocol.handler = { request in
@@ -59,25 +59,52 @@ final class APIClientSessionsTests: XCTestCase {
             return StubResponse(
                 statusCode: 200,
                 body: """
-                {
-                  "text": "A sharper frame.",
-                  "usage": {
-                    "inputTokens": 12,
-                    "outputTokens": 34,
-                    "costUsd": 0.0012
-                  }
-                }
+                event: text
+                data: {"delta":"A sharper "}
+
+                event: audio
+                data: {"chunk":"AQID","format":"pcm_16000"}
+
+                event: text
+                data: {"delta":"frame."}
+
+                event: usage
+                data: {"llm":{"model":"claude-sonnet-4-6","inputTokens":12,"outputTokens":34,"cacheCreationInputTokens":0,"cacheReadInputTokens":0,"costUsd":0.0012,"durationMs":5},"tts":null}
+
+                event: done
+                data: {}
+
                 """,
             )
         }
 
         let client = APIClient(config: testConfig(), session: stubSession())
-        let response = try await client.sendTurn(sessionId: sessionId, message: "What changed?")
+        let stream = try await client.streamTurn(sessionId: sessionId, message: "What changed?")
+        let events = try await collectEvents(from: stream)
 
-        XCTAssertEqual(response.text, "A sharper frame.")
-        XCTAssertEqual(response.usage.inputTokens, 12)
-        XCTAssertEqual(response.usage.outputTokens, 34)
-        XCTAssertEqual(response.usage.costUsd, 0.0012)
+        XCTAssertEqual(
+            events,
+            [
+                .text("A sharper "),
+                .audio(chunkBase64: "AQID", format: "pcm_16000"),
+                .text("frame."),
+                .usage(
+                    TurnStreamUsage(
+                        llm: LLMUsageEvent(
+                            model: "claude-sonnet-4-6",
+                            inputTokens: 12,
+                            outputTokens: 34,
+                            cacheCreationInputTokens: 0,
+                            cacheReadInputTokens: 0,
+                            costUsd: 0.0012,
+                            durationMs: 5
+                        ),
+                        tts: nil
+                    )
+                ),
+                .done,
+            ]
+        )
     }
 
     func testEndSessionPostsEndAndDecodesSession() async throws {
@@ -115,7 +142,7 @@ final class APIClientSessionsTests: XCTestCase {
         XCTAssertNotNil(session.endAt)
     }
 
-    func testSendTurnHTTP409SurfacesServerAPIError() async throws {
+    func testStreamTurnHTTP409SurfacesServerAPIError() async throws {
         let sessionId = UUID(uuidString: "66666666-6666-6666-6666-666666666666")!
 
         StubURLProtocol.handler = { _ in
@@ -125,7 +152,8 @@ final class APIClientSessionsTests: XCTestCase {
         let client = APIClient(config: testConfig(), session: stubSession())
 
         do {
-            _ = try await client.sendTurn(sessionId: sessionId, message: "Hello")
+            let stream = try await client.streamTurn(sessionId: sessionId, message: "Hello")
+            _ = try await collectEvents(from: stream)
             XCTFail("Expected APIError.server")
         } catch APIError.server(let status, let message) {
             XCTAssertEqual(status, 409)
@@ -143,6 +171,14 @@ final class APIClientSessionsTests: XCTestCase {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [StubURLProtocol.self]
         return URLSession(configuration: configuration)
+    }
+
+    private func collectEvents(from stream: SSEStreamConsumer) async throws -> [SSEEvent] {
+        var events: [SSEEvent] = []
+        for try await event in stream {
+            events.append(event)
+        }
+        return events
     }
 }
 

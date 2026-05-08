@@ -54,6 +54,7 @@ actor APIClient {
         return try JSONDecoder().decode(Session.self, from: data)
     }
 
+    @available(*, deprecated, message: "Use streamTurn(sessionId:message:) for SSE turn streaming.")
     func sendTurn(sessionId: UUID, message: String) async throws -> TurnResponse {
         var request = makeRequest(path: "/sessions/\(sessionId.uuidString)/turn", method: "POST")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -62,6 +63,15 @@ actor APIClient {
         let (data, response) = try await perform(request)
         try Self.assertStatus(response, expected: 200, data: data)
         return try JSONDecoder().decode(TurnResponse.self, from: data)
+    }
+
+    func streamTurn(sessionId: UUID, message: String) throws -> SSEStreamConsumer {
+        var request = makeRequest(path: "/sessions/\(sessionId.uuidString)/turn", method: "POST")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        let body = SendTurnRequest(message: message)
+        request.httpBody = try JSONEncoder().encode(body)
+        return SSEStreamConsumer(request: request, session: session)
     }
 
     func endSession(sessionId: UUID) async throws -> Session {

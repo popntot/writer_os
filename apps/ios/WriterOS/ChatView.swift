@@ -8,6 +8,7 @@ struct ChatView: View {
     @EnvironmentObject private var configStore: AppConfigStore
 
     @StateObject private var voiceController = VoiceSessionController()
+    @State private var audioPlayback: any AudioPlaying
     @State private var session: Session?
     @State private var messages: [ChatMessage] = []
     @State private var draft: String = ""
@@ -16,6 +17,16 @@ struct ChatView: View {
     @State private var isEndingSession = false
     @State private var didStartSession = false
     @State private var errorMessage: String?
+
+    init(projectId: UUID) {
+        self.projectId = projectId
+        _audioPlayback = State(initialValue: AudioPlaybackEngine())
+    }
+
+    init(projectId: UUID, audioPlayback: any AudioPlaying) {
+        self.projectId = projectId
+        _audioPlayback = State(initialValue: audioPlayback)
+    }
 
     var body: some View {
         VStack {
@@ -37,6 +48,12 @@ struct ChatView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Text(message.text)
+                            .foregroundStyle(message.isError ? Color.red : Color.primary)
+                        if let usage = message.usage {
+                            Text("Cost: \(usage.llm.costUsd + (usage.tts?.costUsd ?? 0), format: .currency(code: "USD"))")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
             }
@@ -156,15 +173,64 @@ struct ChatView: View {
 
         draft = ""
         messages.append(ChatMessage(role: "user", text: message))
+        messages.append(ChatMessage(role: "assistant", text: ""))
+        let assistantIndex = messages.index(before: messages.endIndex)
+        audioPlayback.reset()
         isSendingTurn = true
+        defer { isSendingTurn = false }
+
         do {
             let client = try makeClient()
-            let response = try await client.sendTurn(sessionId: session.id, message: message)
-            messages.append(ChatMessage(role: "assistant", text: response.text))
+            let stream = try await client.streamTurn(sessionId: session.id, message: message)
+
+            for try await event in stream {
+                try handleTurnEvent(event, assistantIndex: assistantIndex)
+                if case .done = event {
+                    break
+                }
+            }
         } catch {
-            errorMessage = error.localizedDescription
+            appendAssistantError(error.localizedDescription, assistantIndex: assistantIndex)
         }
-        isSendingTurn = false
+    }
+
+    private func handleTurnEvent(_ event: SSEEvent, assistantIndex: Int) throws {
+        guard messages.indices.contains(assistantIndex) else { return }
+
+        switch event {
+        case .text(let delta):
+            messages[assistantIndex].text += delta
+        case .audio(let chunkBase64, let format):
+            guard format == "pcm_16000" else {
+                print("Dropping unsupported audio format: \(format)")
+                return
+            }
+            guard let data = Data(base64Encoded: chunkBase64) else {
+                print("Dropping invalid base64 audio chunk")
+                return
+            }
+            try audioPlayback.start()
+            try audioPlayback.enqueue(pcmInt16Data: data)
+        case .usage(let usage):
+            messages[assistantIndex].usage = usage
+        case .done:
+            return
+        case .error(let message):
+            appendAssistantError(message, assistantIndex: assistantIndex)
+        case .unknown:
+            return
+        }
+    }
+
+    private func appendAssistantError(_ message: String, assistantIndex: Int) {
+        guard messages.indices.contains(assistantIndex) else {
+            errorMessage = message
+            return
+        }
+
+        let prefix = messages[assistantIndex].text.isEmpty ? "" : "\n\n"
+        messages[assistantIndex].text += "\(prefix)Error: \(message)"
+        messages[assistantIndex].isError = true
     }
 
     private func endSession() async {
@@ -191,5 +257,7 @@ struct ChatView: View {
 private struct ChatMessage: Identifiable, Hashable {
     let id = UUID()
     let role: String
-    let text: String
+    var text: String
+    var usage: TurnStreamUsage?
+    var isError = false
 }
