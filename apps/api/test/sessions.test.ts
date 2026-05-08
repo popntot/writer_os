@@ -428,7 +428,7 @@ describe("Writer OS API sessions", () => {
 
     expect(audioEvent?.data).toEqual({
       chunk: expect.any(String),
-      format: "mp3_44100_128",
+      format: "pcm_16000",
     });
 
     const audioData = audioEvent?.data as { chunk: string; format: string };

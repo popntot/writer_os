@@ -44,7 +44,7 @@ interface TurnUsageEvent {
   tts: TTSUsageEvent | null;
 }
 
-const TTS_AUDIO_FORMAT: AudioFormat = "mp3_44100_128";
+const TTS_AUDIO_FORMAT: AudioFormat = "pcm_16000";
 
 function serializeSession(session: Session): SessionResponse {
   return {
