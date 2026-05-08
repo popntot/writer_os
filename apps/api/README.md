@@ -35,6 +35,8 @@ Tests use `@electric-sql/pglite` (Postgres in WASM) so they require zero externa
 pnpm test
 ```
 
+Note: after adding a new workspace dependency (e.g. a new `packages/*` consumed here), the first test run must be `pnpm test` (turbo) so the dependency's build runs first. `pnpm --filter @writer-os/api test` skips upstream builds and will fail to resolve the new package until turbo has built it once.
+
 ## Deployment
 
 Deferred until production secrets are provisioned. Once `WRITER_OS_API_SECRET` and `DATABASE_URL` are set via `wrangler secret put`, deploy with:
