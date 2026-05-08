@@ -4,6 +4,55 @@ Reverse-chronological log of work shipped across sessions. Each entry: what got 
 
 ---
 
+## 2026-05-07 (session 5) — Issue #6 shipped (PR #27 merged); #7 in flight (PR #29); ElevenLabs prepay done
+
+**Shipped today:**
+
+- **PR #27 merged as `0e01bbf`** (squash-merge, branch deleted). Issue #6 closed. LLMClient package + sessions endpoints + iOS chat — first text-turn round-trip Anthropic-live in production. Built earlier in the day; this session opened with #6 already merged.
+- **PR #29 opened for issue #7** — TrueLineStore + hardcoded-delta spine read-back. Branch `issue/7-trueline-store`, commit `abeb4a7`. Awaiting Will review/merge.
+
+**What landed in PR #29 (TrueLineStore slice plumbing):**
+
+- `packages/db`: `true_line_versions` Drizzle schema + migration `0002_public_tempest.sql`. PK on `(project_id, version)`, FK to `projects` (cascade) and `sessions`, `version > 0` check.
+- `packages/db/src/trueline-store.ts`: `createTrueLineStore(db)` factory implementing the locked interface from `docs/interfaces/trueline-store.md`. v0 (empty initial state) is synthesized by `read()` and never stored. Concurrent `applyDelta` linearized via PK + retry-on-unique-violation (8-attempt budget).
+- `packages/db/test/trueline-store.test.ts`: 6 vitest property tests against PGlite covering all 5 invariants from the locked interface (monotonic version, idempotent read, immutable history, concurrent linearization with 8 racing writers, empty-state v0). Vitest newly wired into `packages/db` (no tests previously).
+- `apps/api/src/routes/projects.ts`: `GET /projects/:id/trueline` returns the current `TrueLineDocument` (with `committedAt: null` for v0 to avoid an epoch-sentinel leaking into the API surface).
+- `apps/api/src/routes/sessions.ts`: `POST /sessions/:id/end` reads current TrueLine and appends a hardcoded line (`- Session {id} ended at {ISO}`) via `applyDelta`. `POST /sessions/:id/turn` reads TrueLine each turn and injects it into the LLM `system` prompt.
+- 6 new integration tests for the round-trip: empty-state at GET endpoint, end-writes-v1, session-2-turn-sees-v1-in-system-prompt.
+
+**Architectural decision pinned in #7 (deviates from issue AC literal text — flagged in PR):**
+
+The AC said "Supabase Storage for blobs, Postgres for version metadata." Implementation uses **a single Postgres table**. Rationale: the locked interface (`docs/interfaces/trueline-store.md`) explicitly hides the storage split as an internal detail, so a single-table impl satisfies the contract. The hardcoded-delta slice has no large-blob workload to amortize the Storage round-trip + abstraction cost. A future swap to object storage stays behind the same `TrueLineStore` seam (the seam is called out in ADR-0003). The PR body documents this tradeoff for review-time consideration.
+
+**Test totals after #7:** 6 db property tests + 22 api integration tests + 8 llm client tests = **36 passing**. `pnpm typecheck` green across all 4 packages.
+
+**Paid-key blockers cleared this session:**
+
+- **ElevenLabs prepaid $20** (auto-refill OFF) ahead of #8. The voice-loop slice now has no provisioning blocker. Memory updated at `~/.claude/projects/-Users-papa-Code-writer-os/memory/project_paid_keys.md`.
+
+**Harness validation note (carry-forward from session 4):**
+
+The PGlite/real-postgres-js test gap remains open. PR #29 adds new INSERT paths (the retry-on-unique-violation loop in `applyDelta`) that would only surface real-Postgres bugs against actual Supabase. This session was on a different Mac (`papa` user, no `.dev.vars` populated), so a real-DB smoke test was not run before opening the PR. Will should validate via the iPhone round-trip after merge, same pattern as #5. If the test gap becomes a recurring source of fix-forwards, testcontainers-postgres or per-CI-run ephemeral Supabase is the longer-term fix.
+
+**Cross-machine note:**
+
+This session ran on `/Users/papa/Code/writer_os` rather than the `williamgreen` machine from session 4. Tooling state on this Mac at session start: Node 25.7 + npm only; no `pnpm`, no `corepack`, no `gh` configured under this user. `pnpm@10.33.2` installed via `npm install -g pnpm@10` with `npm config set prefix "$HOME/.local"` (avoids the homebrew/sudo wall). System `git` was gated on Xcode license — Will accepted via `sudo xcodebuild -license` mid-session to unblock branch + commit + push.
+
+**Next session pickup, in order:**
+
+1. **Will reviews and merges PR #29.** Once merged, slice #7 closes.
+2. **#8 — voice loop** (AFK, blocked by #7 — unblocks on merge). ElevenLabs prepay done. Apple Speech (STT) → Claude Sonnet → ElevenLabs (TTS), pipelined per ADR-0002. iOS-heavy slice; press-to-talk in the chat view; offline transcript/audio capture is a separate later slice (#20).
+3. **#9 — ConsolidationWorker** (AFK, blocked by #7 — unblocks on merge). Replaces the hardcoded delta from #7 with real LLM-driven consolidation. Writes TrueLine + next-session starter; OpenQuestions/artifacts deferred to later slices (#16, #17).
+4. **#10 — Real-walk smoke test (HITL GO/NO-GO).** After #8 + #9. Will does one real walk; if NO-GO, fix the failing slice before any accretion.
+
+**Open threads / things to remember:**
+
+- All open threads from sessions 1–4 still apply.
+- `apps/api/.dev.vars` is per-machine and not in this repo; setting up on a fresh machine: copy DATABASE_URL (Supabase Transaction pooler URI) + WRITER_OS_API_SECRET + ANTHROPIC_API_KEY locally before `pnpm api:dev`.
+- ElevenLabs API key not yet wired to env (no slice consumes it yet — #8 will). Will should add the key to a future `.dev.vars` line at #8 claim time.
+
+---
+
 ## 2026-05-07 (session 4, continued) — Issue #6 shipped (PR #27 merged); first text-turn round-trip green
 
 **Shipped:**
