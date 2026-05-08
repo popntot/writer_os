@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import type { AppDatabase } from "@writer-os/db";
+import { createTrueLineStore, type AppDatabase } from "@writer-os/db";
 import type { LLMClient } from "@writer-os/llm";
 import { createDbForWorker } from "./db.js";
 import type { Env } from "./env.js";
@@ -13,13 +13,14 @@ export function createApp(
   db: AppDatabase,
   llm: LLMClient,
 ): Hono<{ Bindings: Env }> {
+  const trueLineStore = createTrueLineStore(db);
   const app = new Hono<{ Bindings: Env }>();
   app.route("/health", createHealthRouter());
   app.use("/projects", authMiddleware);
   app.use("/projects/*", authMiddleware);
   app.use("/sessions/*", authMiddleware);
-  app.route("/projects", createProjectsRouter(db));
-  app.route("/", createSessionsRouter(db, llm));
+  app.route("/projects", createProjectsRouter(db, trueLineStore));
+  app.route("/", createSessionsRouter(db, llm, trueLineStore));
   return app;
 }
 

@@ -1,6 +1,12 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { Hono } from "hono";
-import { schema, type AppDatabase, type Session } from "@writer-os/db";
+import {
+  schema,
+  type AppDatabase,
+  type Session,
+  type TrueLineDocument,
+  type TrueLineStore,
+} from "@writer-os/db";
 import type { LLMClient } from "@writer-os/llm";
 import type { Env } from "../env.js";
 
@@ -81,9 +87,33 @@ function validateTurnBody(body: unknown): TurnInput | string {
   return { message: body.message.trim() };
 }
 
+function buildSystemPrompt(trueLine: TrueLineDocument): string {
+  const header =
+    "You are Writer OS, a thinking partner for a writer. Help them sharpen their thinking through dialogue.";
+
+  if (trueLine.version === 0 || trueLine.content.trim().length === 0) {
+    return `${header}\n\nThis is the first session for this project; the TrueLine is empty.`;
+  }
+
+  return `${header}\n\nTrueLine for this project (canonical understanding so far, version ${trueLine.version}):\n---\n${trueLine.content}\n---`;
+}
+
+function appendHardcodedDelta(
+  currentContent: string,
+  sessionId: string,
+  endedAt: Date,
+): string {
+  const line = `- Session ${sessionId} ended at ${endedAt.toISOString()}`;
+  if (currentContent.trim().length === 0) {
+    return line;
+  }
+  return `${currentContent}\n${line}`;
+}
+
 export function createSessionsRouter(
   db: AppDatabase,
   llm: LLMClient,
+  trueLineStore: TrueLineStore,
 ): Hono<{ Bindings: Env }> {
   const router = new Hono<{ Bindings: Env }>();
 
@@ -146,7 +176,10 @@ export function createSessionsRouter(
       return c.json({ error: validation }, 400);
     }
 
+    const trueLine = await trueLineStore.read(session.projectId);
+
     const result = await llm.chat({
+      system: buildSystemPrompt(trueLine),
       messages: [{ role: "user", content: validation.message }],
     });
 
@@ -176,15 +209,29 @@ export function createSessionsRouter(
       return c.json({ error: "session already ended" }, 409);
     }
 
+    const endedAt = new Date();
     const [updated] = await db
       .update(schema.sessions)
-      .set({ endAt: new Date() })
+      .set({ endAt: endedAt })
       .where(and(eq(schema.sessions.id, sessionId), isNull(schema.sessions.endAt)))
       .returning();
 
     if (updated === undefined) {
       return c.json({ error: "session already ended" }, 409);
     }
+
+    // Hardcoded delta: real LLM-driven consolidation lands in #9. This slice
+    // exercises the spine plumbing — TrueLine is read on the next turn's
+    // system prompt, so the round-trip is verifiable end-to-end.
+    const current = await trueLineStore.read(updated.projectId);
+    const newContent = appendHardcodedDelta(current.content, sessionId, endedAt);
+
+    await trueLineStore.applyDelta({
+      projectId: updated.projectId,
+      sourceSessionId: sessionId,
+      newContent,
+      contributionSummary: `Session ${sessionId} ended (hardcoded)`,
+    });
 
     return c.json(serializeSession(updated));
   });

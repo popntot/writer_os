@@ -1,5 +1,12 @@
 export * as schema from "./schema.js";
-export type { Project, NewProject, Session, NewSession } from "./schema.js";
+export type {
+  Project,
+  NewProject,
+  Session,
+  NewSession,
+  TrueLineVersionRow,
+  NewTrueLineVersionRow,
+} from "./schema.js";
 export {
   createNodeClient,
   type Database,
@@ -20,3 +27,11 @@ import type { PgliteDb } from "./client-pglite.js";
  * tests (pglite) drive the same code path.
  */
 export type AppDatabase = Database | PgliteDb;
+
+export {
+  createTrueLineStore,
+  type TrueLineStore,
+  type TrueLineDocument,
+  type TrueLineVersionMeta,
+  type ApplyDeltaInput,
+} from "./trueline-store.js";
