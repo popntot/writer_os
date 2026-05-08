@@ -1,5 +1,12 @@
+import { eq } from "drizzle-orm";
 import { Hono } from "hono";
-import { schema, type AppDatabase, type Project } from "@writer-os/db";
+import {
+  schema,
+  type AppDatabase,
+  type Project,
+  type TrueLineDocument,
+  type TrueLineStore,
+} from "@writer-os/db";
 import type { Env } from "../env.js";
 
 interface ProjectResponse {
@@ -16,6 +23,15 @@ interface CreateProjectInput {
   type?: string;
 }
 
+interface TrueLineResponse {
+  projectId: string;
+  version: number;
+  content: string;
+  sourceSessionId: string | null;
+  committedAt: string | null;
+  contributionSummary: string | null;
+}
+
 function serializeProject(project: Project): ProjectResponse {
   return {
     id: project.id,
@@ -24,6 +40,19 @@ function serializeProject(project: Project): ProjectResponse {
     createdAt: project.createdAt.toISOString(),
     archivedAt: project.archivedAt?.toISOString() ?? null,
     mentorRef: project.mentorRef,
+  };
+}
+
+function serializeTrueLine(doc: TrueLineDocument): TrueLineResponse {
+  return {
+    projectId: doc.projectId,
+    version: doc.version,
+    content: doc.content,
+    sourceSessionId: doc.sourceSessionId,
+    // v0 has no real commit time; surface null rather than the epoch sentinel.
+    committedAt:
+      doc.version === 0 ? null : doc.committedAt.toISOString(),
+    contributionSummary: doc.contributionSummary,
   };
 }
 
@@ -57,6 +86,7 @@ function validateCreateProjectBody(
 
 export function createProjectsRouter(
   db: AppDatabase,
+  trueLineStore: TrueLineStore,
 ): Hono<{ Bindings: Env }> {
   const router = new Hono<{ Bindings: Env }>();
 
@@ -83,6 +113,22 @@ export function createProjectsRouter(
     }
 
     return c.json(serializeProject(created), 201);
+  });
+
+  router.get("/:projectId/trueline", async (c) => {
+    const projectId = c.req.param("projectId");
+    const [project] = await db
+      .select({ id: schema.projects.id })
+      .from(schema.projects)
+      .where(eq(schema.projects.id, projectId))
+      .limit(1);
+
+    if (project === undefined) {
+      return c.json({ error: "project not found" }, 404);
+    }
+
+    const doc = await trueLineStore.read(projectId);
+    return c.json(serializeTrueLine(doc));
   });
 
   return router;

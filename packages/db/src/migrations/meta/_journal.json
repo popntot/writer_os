@@ -15,6 +15,13 @@
       "when": 1778187997542,
       "tag": "0001_late_miracleman",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1778198402320,
+      "tag": "0002_public_tempest",
+      "breakpoints": true
     }
   ]
 }
