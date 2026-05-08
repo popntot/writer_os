@@ -1,5 +1,6 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { Hono } from "hono";
+import { streamSSE, type SSEStreamingApi } from "hono/streaming";
 import {
   schema,
   type AppDatabase,
@@ -7,7 +8,12 @@ import {
   type TrueLineDocument,
   type TrueLineStore,
 } from "@writer-os/db";
-import type { LLMClient } from "@writer-os/llm";
+import type { LLMClient, UsageEvent } from "@writer-os/llm";
+import type {
+  AudioFormat,
+  TTSStreamer,
+  TTSUsageEvent,
+} from "@writer-os/tts";
 import type { Env } from "../env.js";
 
 interface SessionResponse {
@@ -29,6 +35,16 @@ interface CreateSessionInput {
 interface TurnInput {
   message: string;
 }
+
+type TTSStreamerFactory = (env: Env) => TTSStreamer | null;
+type StreamEvent = "text" | "audio" | "usage" | "done" | "error";
+
+interface TurnUsageEvent {
+  llm: UsageEvent;
+  tts: TTSUsageEvent | null;
+}
+
+const TTS_AUDIO_FORMAT: AudioFormat = "mp3_44100_128";
 
 function serializeSession(session: Session): SessionResponse {
   return {
@@ -110,10 +126,169 @@ function appendHardcodedDelta(
   return `${currentContent}\n${line}`;
 }
 
+function hasElevenLabsKey(env: Env): boolean {
+  return (env.ELEVENLABS_API_KEY?.trim().length ?? 0) > 0;
+}
+
+function createSSEWriter(stream: SSEStreamingApi): {
+  write: (event: StreamEvent, payload: unknown) => Promise<void>;
+} {
+  let chain = Promise.resolve();
+
+  return {
+    write(event: StreamEvent, payload: unknown): Promise<void> {
+      chain = chain.then(() =>
+        stream.writeSSE({
+          event,
+          data: JSON.stringify(payload),
+        }),
+      );
+
+      return chain;
+    },
+  };
+}
+
+async function drainLLMText(
+  llm: LLMClient,
+  opts: Parameters<LLMClient["stream"]>[0],
+  writer: ReturnType<typeof createSSEWriter>,
+): Promise<UsageEvent> {
+  const llmStream = llm.stream(opts);
+
+  try {
+    for await (const delta of llmStream) {
+      await writer.write("text", { delta });
+    }
+
+    const result = await llmStream.done;
+    return result.usage;
+  } catch (error) {
+    await llmStream.done.catch(() => undefined);
+    throw error;
+  }
+}
+
+async function drainLLMStream(
+  llmStream: ReturnType<LLMClient["stream"]>,
+  queue: AsyncQueue<string>,
+  writer: ReturnType<typeof createSSEWriter>,
+  ttsIterator: AsyncIterator<Uint8Array>,
+): Promise<UsageEvent> {
+  try {
+    for await (const delta of llmStream) {
+      await writer.write("text", { delta });
+      queue.push(delta);
+    }
+
+    queue.close();
+    const result = await llmStream.done;
+    return result.usage;
+  } catch (error) {
+    queue.close();
+    await ttsIterator.return?.();
+    await llmStream.done.catch(() => undefined);
+    throw error;
+  }
+}
+
+async function drainTTSStream(
+  iterator: AsyncIterator<Uint8Array>,
+  done: Promise<{ usage: TTSUsageEvent }>,
+  writer: ReturnType<typeof createSSEWriter>,
+): Promise<TTSUsageEvent | null> {
+  try {
+    while (true) {
+      const next = await iterator.next();
+      if (next.done === true) {
+        break;
+      }
+
+      await writer.write("audio", {
+        chunk: encodeBase64(next.value),
+        format: TTS_AUDIO_FORMAT,
+      });
+    }
+
+    const result = await done;
+    return result.usage;
+  } catch (error) {
+    await done.catch(() => undefined);
+    await writer.write("error", { message: errorMessage(error) });
+    return null;
+  }
+}
+
+function encodeBase64(bytes: Uint8Array): string {
+  let binary = "";
+
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+
+  return btoa(binary);
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "unknown error";
+}
+
+class AsyncQueue<T> implements AsyncIterable<T> {
+  private readonly values: T[] = [];
+  private readonly waiters: Array<() => void> = [];
+  private closed = false;
+
+  push(value: T): void {
+    if (this.closed) {
+      return;
+    }
+
+    this.values.push(value);
+    this.notify();
+  }
+
+  close(): void {
+    if (!this.closed) {
+      this.closed = true;
+      this.notify();
+    }
+  }
+
+  [Symbol.asyncIterator](): AsyncIterator<T> {
+    return {
+      next: async (): Promise<IteratorResult<T>> => {
+        while (this.values.length === 0) {
+          if (this.closed) {
+            return { done: true, value: undefined };
+          }
+
+          await new Promise<void>((resolve) => {
+            this.waiters.push(resolve);
+          });
+        }
+
+        const value = this.values.shift();
+        if (value === undefined) {
+          throw new Error("async queue value was unexpectedly missing");
+        }
+
+        return { done: false, value };
+      },
+    };
+  }
+
+  private notify(): void {
+    for (const waiter of this.waiters.splice(0)) {
+      waiter();
+    }
+  }
+}
+
 export function createSessionsRouter(
   db: AppDatabase,
   llm: LLMClient,
   trueLineStore: TrueLineStore,
+  createTTS: TTSStreamerFactory,
 ): Hono<{ Bindings: Env }> {
   const router = new Hono<{ Bindings: Env }>();
 
@@ -177,19 +352,54 @@ export function createSessionsRouter(
     }
 
     const trueLine = await trueLineStore.read(session.projectId);
-
-    const result = await llm.chat({
+    const llmOptions = {
       system: buildSystemPrompt(trueLine),
-      messages: [{ role: "user", content: validation.message }],
-    });
+      messages: [{ role: "user" as const, content: validation.message }],
+    };
 
-    return c.json({
-      text: result.text,
-      usage: {
-        inputTokens: result.usage.inputTokens,
-        outputTokens: result.usage.outputTokens,
-        costUsd: result.usage.costUsd,
-      },
+    return streamSSE(c, async (stream) => {
+      const writer = createSSEWriter(stream);
+      const tts = hasElevenLabsKey(c.env) ? createTTS(c.env) : null;
+
+      if (!tts) {
+        try {
+          const llmUsage = await drainLLMText(llm, llmOptions, writer);
+          await writer.write("usage", { llm: llmUsage, tts: null });
+          await writer.write("done", {});
+        } catch (error) {
+          await writer.write("error", { message: errorMessage(error) });
+          await writer.write("done", {});
+        }
+        return;
+      }
+
+      const queue = new AsyncQueue<string>();
+      const llmStream = llm.stream(llmOptions);
+      const ttsStream = tts.stream({
+        text: queue,
+        format: TTS_AUDIO_FORMAT,
+        metadata: { sessionId },
+      });
+      const ttsIterator = ttsStream[Symbol.asyncIterator]();
+
+      const textTask = drainLLMStream(llmStream, queue, writer, ttsIterator);
+      const audioTask = drainTTSStream(ttsIterator, ttsStream.done, writer);
+
+      let llmUsage: UsageEvent;
+      try {
+        llmUsage = await textTask;
+      } catch (error) {
+        void ttsStream.done.catch(() => undefined);
+        void audioTask.catch(() => undefined);
+        await writer.write("error", { message: errorMessage(error) });
+        await writer.write("done", {});
+        return;
+      }
+
+      const ttsUsage = await audioTask;
+      const usage: TurnUsageEvent = { llm: llmUsage, tts: ttsUsage };
+      await writer.write("usage", usage);
+      await writer.write("done", {});
     });
   });
 
