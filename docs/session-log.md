@@ -4,6 +4,49 @@ Reverse-chronological log of work shipped across sessions. Each entry: what got 
 
 ---
 
+## 2026-05-07 (session 4, continued) — Issue #6 shipped (PR #27 merged); first text-turn round-trip green
+
+**Shipped:**
+
+- PR #27 merged as `0e01bbf` (squash-merge, branch deleted). Issue #6 closed.
+- LLMClient interface locked at issue-claim time per AGENTS.md "lazy depth review for Low-priority modules" convention. New `docs/interfaces/llm-client.md`. Lighter than the four High-priority interface docs (TrueLineStore et al).
+- Anthropic API credits provisioned: \$50 prepay, auto-refill OFF. Dev key in `apps/api/.dev.vars` (gitignored).
+- Three Codex passes on the issue branch, all reviewed + fix-forwarded by Claude Code:
+  - **Pass 1** — `packages/llm` workspace package wrapping `@anthropic-ai/sdk`. Streaming-first, retry/backoff, cost callback. 8 vitest cases.
+  - **Pass 2** — `sessions` table migration + three endpoints (`POST /projects/:id/sessions`, `POST /sessions/:id/turn`, `POST /sessions/:id/end`). 9 integration tests with fake LLM injection. Fix-forward: `targetArticleId ?? null` for `exactOptionalPropertyTypes` compat.
+  - **Pass 3** — SwiftUI `ChatView` + APIClient extensions. 4 new XCTests.
+- HITL round-trip end-to-end: real iPhone → Worker → Anthropic API → response. Will reports it works; minor SwiftUI lag (NavigationStack transition + keyboard) noted but not addressed (UX polish deferred per standing instruction).
+
+**Test status at merge:**
+
+- 24/24 Node tests pass (8 LLM + 7 projects + 9 sessions)
+- 7/7 XCTests pass (3 existing + 4 new APIClientSessionsTests)
+- `pnpm typecheck` green across all 7 workspace tasks
+
+**Harness friction surfaced (worth formalizing):**
+
+Codex's sandbox has no network access. `pnpm install` and `xcodebuild test` cannot run inside it. Codex writes code statically; the unsandboxed reviewer (Claude Code) handles install + verification. This worked fine across all three passes but wasn't documented in `docs/agents/harness.md`. Update the harness doc on the next session: codify the workflow as "Codex writes code, reviewer verifies" rather than "Codex implements + runs tests" which the current text implies.
+
+A second, smaller friction: `pnpm --filter @writer-os/api test` doesn't trigger upstream package builds; only `pnpm test` (turbo run test) does because of `dependsOn: ["^build"]`. New workspace dependencies (e.g. apps/api → packages/llm) require `pnpm test` (turbo) the first time, not `pnpm --filter`. Worth a one-line note in `apps/api/README.md`.
+
+**Open threads / things to remember:**
+
+- `@anthropic-ai/sdk` pinned at `^0.91.1`; current published is 0.95.1. Working pin; bump opportunistically.
+- LLMClient internals use runtime introspection (`getProperty`, `asRecord`) instead of importing SDK types directly. Defensive, but harder to read than the typed alternative. Consider tightening once we have a stable SDK pin.
+- Test gap: `packages/llm` tests use mocked SDK (PGlite-style — fast, no network). Real-Anthropic integration test deferred. Same gap class as the PGlite-vs-real-postgres bug from session 4 part 1 — flag if it bites us.
+- Three test rows from session 4 part 1 still live in the dev Supabase. Plus whatever sessions Will created today during HITL. Schema's evolving anyway; ignore.
+- LAN IP for iPhone testing: `192.168.1.252` today on `en0` (was on `en1` earlier in the session — interface depends on Wi-Fi vs Ethernet state).
+
+**Next session pickup, in order:**
+
+1. **Update `docs/agents/harness.md`** with the two friction notes above (Codex netless sandbox; pnpm filter vs turbo). One small commit.
+2. **#7 — TrueLineStore + hardcoded delta** (AFK, blocked-by #6 — now unblocked). No paid-key blocker. Spine plumbing; no LLM call yet.
+3. **#8 — voice loop** (AFK, blocked-by #7). **Second paid-key blocker:** ElevenLabs prepay \$20–30, auto-refill OFF, before #8 starts.
+4. **#9 — ConsolidationWorker** (AFK, blocked-by #7). First real LLM call beyond the smoke test in #6.
+5. **#10 — Real-walk smoke test (HITL GO/NO-GO).** Critical gate — after #10, Phase C cloud-AFK becomes a justifiable decision.
+
+---
+
 ## 2026-05-07 (session 4) — Issue #5 shipped (PR #25 merged); first iPhone tracer green
 
 **Shipped:**
