@@ -9,6 +9,7 @@ struct ChatView: View {
 
     @StateObject private var voiceController = VoiceSessionController()
     @State private var audioPlayback: any AudioPlaying
+    @State private var sessionEndCoordinator: SessionEndCoordinator
     @State private var session: Session?
     @State private var messages: [ChatMessage] = []
     @State private var draft: String = ""
@@ -21,11 +22,23 @@ struct ChatView: View {
     init(projectId: UUID) {
         self.projectId = projectId
         _audioPlayback = State(initialValue: AudioPlaybackEngine())
+        _sessionEndCoordinator = State(initialValue: SessionEndCoordinator())
     }
 
     init(projectId: UUID, audioPlayback: any AudioPlaying) {
         self.projectId = projectId
         _audioPlayback = State(initialValue: audioPlayback)
+        _sessionEndCoordinator = State(initialValue: SessionEndCoordinator())
+    }
+
+    init(
+        projectId: UUID,
+        audioPlayback: any AudioPlaying,
+        sessionEndCoordinator: SessionEndCoordinator
+    ) {
+        self.projectId = projectId
+        _audioPlayback = State(initialValue: audioPlayback)
+        _sessionEndCoordinator = State(initialValue: sessionEndCoordinator)
     }
 
     var body: some View {
@@ -91,6 +104,9 @@ struct ChatView: View {
                         .onSubmit {
                             Task { await send() }
                         }
+                        .onChange(of: draft) { _, _ in
+                            sessionEndCoordinator.recordActivity()
+                        }
                     Button("Send") {
                         Task { await send() }
                     }
@@ -102,9 +118,14 @@ struct ChatView: View {
         .navigationTitle("Chat")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("End") {
-                    Task { await endSession() }
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                Button("Wrap up") {
+                    Task { await endSessionAndDismiss() }
+                }
+                .disabled(session == nil || isEndingSession)
+
+                Button("Sync now") {
+                    Task { await endSessionAndDismiss() }
                 }
                 .disabled(session == nil || isEndingSession)
             }
@@ -113,6 +134,9 @@ struct ChatView: View {
             guard !didStartSession else { return }
             didStartSession = true
             await startSession()
+        }
+        .onDisappear {
+            sessionEndCoordinator.cancel()
         }
         .alert(
             "Error",
@@ -149,7 +173,20 @@ struct ChatView: View {
         isCreatingSession = true
         do {
             let client = APIClient(config: config)
-            session = try await client.createSession(projectId: projectId)
+            let createdSession = try await client.createSession(projectId: projectId)
+            session = createdSession
+            sessionEndCoordinator.startMonitoring(
+                endSession: {
+                    let client = try makeClient()
+                    _ = try await client.endSession(sessionId: createdSession.id)
+                },
+                onDismiss: {
+                    dismiss()
+                },
+                onError: { error in
+                    errorMessage = error.localizedDescription
+                }
+            )
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -157,6 +194,7 @@ struct ChatView: View {
     }
 
     private func togglePTT() async {
+        sessionEndCoordinator.recordActivity()
         let wasRecording = voiceController.state == .recording
         await voiceController.togglePTT()
 
@@ -211,6 +249,7 @@ struct ChatView: View {
             }
             try audioPlayback.start()
             try audioPlayback.enqueue(pcmInt16Data: data)
+            sessionEndCoordinator.recordActivity()
         case .usage(let usage):
             messages[assistantIndex].usage = usage
         case .done:
@@ -233,16 +272,10 @@ struct ChatView: View {
         messages[assistantIndex].isError = true
     }
 
-    private func endSession() async {
-        guard let session else { return }
+    private func endSessionAndDismiss() async {
+        guard session != nil, !isEndingSession else { return }
         isEndingSession = true
-        do {
-            let client = try makeClient()
-            _ = try await client.endSession(sessionId: session.id)
-            dismiss()
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+        await sessionEndCoordinator.endSessionAndDismiss()
         isEndingSession = false
     }
 
