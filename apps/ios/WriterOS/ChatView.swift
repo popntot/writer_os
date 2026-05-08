@@ -7,6 +7,7 @@ struct ChatView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var configStore: AppConfigStore
 
+    @StateObject private var voiceController = VoiceSessionController()
     @State private var session: Session?
     @State private var messages: [ChatMessage] = []
     @State private var draft: String = ""
@@ -40,17 +41,44 @@ struct ChatView: View {
                 }
             }
 
-            HStack {
-                TextField("Message", text: $draft, axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
-                    .disabled(inputDisabled)
-                    .onSubmit {
+            VStack(alignment: .leading, spacing: 8) {
+                if showLiveTranscript {
+                    Text(voiceController.liveTranscript)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                if case .error(let voiceError) = voiceController.state {
+                    Text(voiceError.localizedDescription)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+
+                HStack {
+                    Button {
+                        Task { await togglePTT() }
+                    } label: {
+                        Image(systemName: voiceController.state == .recording ? "mic.fill" : "mic")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(voiceController.state == .recording ? .red : .accentColor)
+                    .disabled(pttDisabled)
+                    .accessibilityLabel(
+                        voiceController.state == .recording ? "Stop recording" : "Start recording"
+                    )
+
+                    TextField("Message", text: $draft, axis: .vertical)
+                        .textFieldStyle(.roundedBorder)
+                        .disabled(inputDisabled)
+                        .onSubmit {
+                            Task { await send() }
+                        }
+                    Button("Send") {
                         Task { await send() }
                     }
-                Button("Send") {
-                    Task { await send() }
+                    .disabled(sendDisabled)
                 }
-                .disabled(sendDisabled)
             }
             .padding()
         }
@@ -86,6 +114,15 @@ struct ChatView: View {
         session == nil || isCreatingSession || isSendingTurn || isEndingSession
     }
 
+    private var pttDisabled: Bool {
+        inputDisabled || voiceController.state == .requestingPermission || voiceController.state == .finalizing
+    }
+
+    private var showLiveTranscript: Bool {
+        !voiceController.liveTranscript.isEmpty &&
+            (voiceController.state == .recording || voiceController.state == .finalizing)
+    }
+
     private var sendDisabled: Bool {
         inputDisabled || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
@@ -100,6 +137,16 @@ struct ChatView: View {
             errorMessage = error.localizedDescription
         }
         isCreatingSession = false
+    }
+
+    private func togglePTT() async {
+        let wasRecording = voiceController.state == .recording
+        await voiceController.togglePTT()
+
+        if wasRecording && !voiceController.finalTranscript.isEmpty {
+            // Pass D sends this editable draft through the SSE turn endpoint.
+            draft = voiceController.finalTranscript
+        }
     }
 
     private func send() async {
