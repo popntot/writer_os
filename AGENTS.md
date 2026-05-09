@@ -136,3 +136,25 @@ The build is sub-funded by default (Claude Max + Codex Plus). When a slice requi
 - Claude Code (the planner/reviewer) flags upcoming paid-key blockers in the session log and in conversation **before** the slice claims the key as a dependency.
 - Codex (the implementer) does **not** attempt to circumvent missing keys with mocks or stubs that change the slice's surface area. If a slice's acceptance criteria requires a key Codex doesn't have, escalate per "AFK escalation" rather than proceed.
 - Stubs are acceptable only when a slice **explicitly** scopes a stub (e.g. issue #11 ships Inbox with a stubbed triage LLM by design — that's a sliced decision, not a workaround).
+
+## Cursor Cloud specific instructions
+
+### Quick reference
+
+| Action | Command |
+|--------|---------|
+| Install deps | `pnpm install` |
+| Build packages | `pnpm build` |
+| Typecheck | `pnpm typecheck` |
+| Run all tests | `pnpm test` |
+| Start API dev server | `pnpm api:dev` |
+
+### Environment notes
+
+- **Node.js >=20** and **pnpm 10.33.2** are pre-installed via nvm.
+- pnpm v10 ignores build scripts by default (warning about esbuild/workerd/sharp). This does **not** affect tests or builds — PGlite, Vitest, and TSC all work without those postinstall scripts. Only the `wrangler dev` server needs workerd, but the platform-specific binary ships without the postinstall script on this architecture.
+- Tests are fully self-contained using PGlite (in-process Postgres in WASM) — no external database needed.
+- The API dev server (`pnpm api:dev` / `wrangler dev`) runs on port 8787. It needs `apps/api/.dev.vars` (copy from `.dev.vars.example`). The `/health` endpoint works without a database; DB-dependent routes (projects, sessions) require a real `DATABASE_URL` pointing at Supabase.
+- Lint is configured in `turbo.json` but no individual packages define lint scripts yet. `pnpm typecheck` is the primary static analysis step.
+- The iOS app (`apps/ios/`) requires macOS + Xcode and cannot be built in this environment.
+- `turbo.json` has `dependsOn: ["^build"]` for test/typecheck tasks, so `pnpm build` must succeed before tests run (turbo handles this automatically).
