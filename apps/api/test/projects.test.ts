@@ -8,7 +8,8 @@ import {
   expect,
   test,
 } from "vitest";
-import { createPgliteClient, type PgliteHandle } from "@writer-os/db";
+import { eq } from "drizzle-orm";
+import { createPgliteClient, schema, type PgliteHandle } from "@writer-os/db";
 import type { ChatOptions, ChatResult, LLMClient, LLMStream } from "@writer-os/llm";
 import { createApp } from "../src/index.js";
 import type { Env } from "../src/env.js";
@@ -162,5 +163,68 @@ describe("Writer OS API projects", () => {
         mentorRef: null,
       },
     ]);
+  });
+
+  test("POST /projects/:projectId/sessions exposes previousConsolidation", async () => {
+    const projectResponse = await app.fetch(
+      buildRequest("/projects", {
+        method: "POST",
+        headers: { ...authHeader(), "Content-Type": "application/json" },
+        body: JSON.stringify({ title: "Race handling fixture" }),
+      }),
+      env,
+    );
+    const project = (await projectResponse.json()) as { id: string };
+
+    const firstSessionResponse = await app.fetch(
+      buildRequest(`/projects/${project.id}/sessions`, {
+        method: "POST",
+        headers: { ...authHeader(), "Content-Type": "application/json" },
+        body: "{}",
+      }),
+      env,
+    );
+    expect(firstSessionResponse.status).toBe(201);
+    const firstSession = (await firstSessionResponse.json()) as {
+      id: string;
+      previousConsolidation: unknown;
+    };
+    expect(firstSession.previousConsolidation).toBeNull();
+
+    const completedAt = new Date("2026-05-08T12:00:00.000Z");
+    await handle.db
+      .update(schema.sessions)
+      .set({
+        endAt: completedAt,
+        consolidationState: "completed",
+        consolidationCompletedAt: completedAt,
+        consolidationContributionSummary: "Previous session wrapped.",
+        consolidationTrueLineVersion: 1,
+      })
+      .where(eq(schema.sessions.id, firstSession.id));
+
+    const secondSessionResponse = await app.fetch(
+      buildRequest(`/projects/${project.id}/sessions`, {
+        method: "POST",
+        headers: { ...authHeader(), "Content-Type": "application/json" },
+        body: "{}",
+      }),
+      env,
+    );
+    expect(secondSessionResponse.status).toBe(201);
+    expect(await secondSessionResponse.json()).toMatchObject({
+      id: expect.any(String),
+      projectId: project.id,
+      previousConsolidation: {
+        state: "completed",
+        completedAt: completedAt.toISOString(),
+        result: {
+          sessionId: firstSession.id,
+          trueLineVersion: 1,
+          contributionSummary: "Previous session wrapped.",
+          completedAt: completedAt.toISOString(),
+        },
+      },
+    });
   });
 });

@@ -20,6 +20,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@writer-os/consolidation':
+        specifier: workspace:*
+        version: link:../../packages/consolidation
       '@writer-os/db':
         specifier: workspace:*
         version: link:../../packages/db
