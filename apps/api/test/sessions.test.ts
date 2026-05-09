@@ -8,7 +8,8 @@ import {
   expect,
   test,
 } from "vitest";
-import { createPgliteClient, type PgliteHandle } from "@writer-os/db";
+import { eq } from "drizzle-orm";
+import { createPgliteClient, schema, type PgliteHandle } from "@writer-os/db";
 import type {
   ChatOptions,
   ChatResult,
@@ -169,6 +170,26 @@ function createStubTTS(options: {
   };
 }
 
+function createFailingLLM(error: Error): LLMClient {
+  return {
+    chat: async (opts: ChatOptions): Promise<ChatResult> => {
+      llmCalls.push(opts);
+      throw error;
+    },
+    stream: (opts: ChatOptions): LLMStream => {
+      llmCalls.push(opts);
+      const done = Promise.reject(error);
+      void done.catch(() => undefined);
+      return {
+        done,
+        async *[Symbol.asyncIterator](): AsyncIterator<string> {
+          throw error;
+        },
+      };
+    },
+  };
+}
+
 async function parseSSE(response: Response): Promise<SSEEvent[]> {
   return parseSSEText(await response.text());
 }
@@ -220,6 +241,46 @@ function decodeBase64(value: string): Uint8Array {
   }
 
   return bytes;
+}
+
+async function createProject(title = "Turn persistence fixture"): Promise<string> {
+  const response = await app.fetch(
+    buildRequest("/projects", {
+      method: "POST",
+      headers: jsonHeaders(),
+      body: JSON.stringify({ title }),
+    }),
+    env,
+  );
+  const body = (await response.json()) as { id: string };
+  return body.id;
+}
+
+async function startSession(projectId: string): Promise<string> {
+  const response = await app.fetch(
+    buildRequest(`/projects/${projectId}/sessions`, {
+      method: "POST",
+      headers: jsonHeaders(),
+      body: "{}",
+    }),
+    env,
+  );
+  const body = (await response.json()) as { id: string };
+  return body.id;
+}
+
+async function readSessionTurns(sessionId: string): Promise<
+  Array<{ turnIdx: number; role: string; content: string }>
+> {
+  return await handle.db
+    .select({
+      turnIdx: schema.sessionTurns.turnIdx,
+      role: schema.sessionTurns.role,
+      content: schema.sessionTurns.content,
+    })
+    .from(schema.sessionTurns)
+    .where(eq(schema.sessionTurns.sessionId, sessionId))
+    .orderBy(schema.sessionTurns.turnIdx);
 }
 
 async function applyMigrations(): Promise<void> {
@@ -520,6 +581,81 @@ describe("Writer OS API sessions", () => {
       },
     });
     expect(events.at(-1)).toEqual({ event: "done", data: {} });
+  });
+
+  test("successful streaming turn persists user and assistant turns", async () => {
+    const persistenceProjectId = await createProject();
+    const sessionId = await startSession(persistenceProjectId);
+
+    const response = await app.fetch(
+      buildRequest(`/sessions/${sessionId}/turn`, {
+        method: "POST",
+        headers: jsonHeaders(),
+        body: JSON.stringify({ message: "Persist this turn." }),
+      }),
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    const events = await parseSSE(response);
+    expect(events.at(-1)).toEqual({ event: "done", data: {} });
+    expect(events.find((event) => event.event === "error")).toBeUndefined();
+
+    expect(await readSessionTurns(sessionId)).toEqual([
+      { turnIdx: 0, role: "user", content: "Persist this turn." },
+      { turnIdx: 1, role: "assistant", content: "Hello from the mentor." },
+    ]);
+  });
+
+  test("Claude error during stream does not persist session turns", async () => {
+    const persistenceProjectId = await createProject();
+    const sessionId = await startSession(persistenceProjectId);
+    const failingApp = createApp(
+      handle.db,
+      createFailingLLM(new Error("claude failed")),
+    );
+
+    const response = await failingApp.fetch(
+      buildRequest(`/sessions/${sessionId}/turn`, {
+        method: "POST",
+        headers: jsonHeaders(),
+        body: JSON.stringify({ message: "This should not persist." }),
+      }),
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    const events = await parseSSE(response);
+    expect(events).toContainEqual({
+      event: "error",
+      data: { message: "claude failed" },
+    });
+    expect(await readSessionTurns(sessionId)).toEqual([]);
+  });
+
+  test("multiple sequential streaming turns increment turnIdx on the same session", async () => {
+    const persistenceProjectId = await createProject();
+    const sessionId = await startSession(persistenceProjectId);
+
+    for (const message of ["First", "Second"]) {
+      const response = await app.fetch(
+        buildRequest(`/sessions/${sessionId}/turn`, {
+          method: "POST",
+          headers: jsonHeaders(),
+          body: JSON.stringify({ message }),
+        }),
+        env,
+      );
+      expect(response.status).toBe(200);
+      await response.text();
+    }
+
+    expect(await readSessionTurns(sessionId)).toEqual([
+      { turnIdx: 0, role: "user", content: "First" },
+      { turnIdx: 1, role: "assistant", content: "Hello from the mentor." },
+      { turnIdx: 2, role: "user", content: "Second" },
+      { turnIdx: 3, role: "assistant", content: "Hello from the mentor." },
+    ]);
   });
 
   test("POST /sessions/:sessionId/turn returns 404 for unknown session", async () => {

@@ -85,9 +85,38 @@ export const trueLineVersions = pgTable(
   }),
 );
 
+/**
+ * Session turns — immutable transcript rows for each user/assistant exchange.
+ * ConsolidationWorker reads these rows after a session ends to synthesize the
+ * next TrueLine delta.
+ */
+export const sessionTurns = pgTable(
+  "session_turns",
+  {
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => sessions.id, { onDelete: "cascade" }),
+    turnIdx: integer("turn_idx").notNull(),
+    role: text("role").notNull(),
+    content: text("content").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.sessionId, table.turnIdx] }),
+    roleCheck: check(
+      "session_turns_role_check",
+      sql`${table.role} in ('user', 'assistant')`,
+    ),
+  }),
+);
+
 export type Project = typeof projects.$inferSelect;
 export type NewProject = typeof projects.$inferInsert;
 export type Session = typeof sessions.$inferSelect;
 export type NewSession = typeof sessions.$inferInsert;
 export type TrueLineVersionRow = typeof trueLineVersions.$inferSelect;
 export type NewTrueLineVersionRow = typeof trueLineVersions.$inferInsert;
+export type SessionTurnRow = typeof sessionTurns.$inferSelect;
+export type NewSessionTurnRow = typeof sessionTurns.$inferInsert;

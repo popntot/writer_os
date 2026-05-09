@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { streamSSE, type SSEStreamingApi } from "hono/streaming";
 import {
@@ -149,20 +149,27 @@ function createSSEWriter(stream: SSEStreamingApi): {
   };
 }
 
+interface LLMDrainResult {
+  usage: UsageEvent;
+  fullText: string;
+}
+
 async function drainLLMText(
   llm: LLMClient,
   opts: Parameters<LLMClient["stream"]>[0],
   writer: ReturnType<typeof createSSEWriter>,
-): Promise<UsageEvent> {
+): Promise<LLMDrainResult> {
   const llmStream = llm.stream(opts);
+  let fullText = "";
 
   try {
     for await (const delta of llmStream) {
+      fullText += delta;
       await writer.write("text", { delta });
     }
 
     const result = await llmStream.done;
-    return result.usage;
+    return { usage: result.usage, fullText };
   } catch (error) {
     await llmStream.done.catch(() => undefined);
     throw error;
@@ -174,16 +181,19 @@ async function drainLLMStream(
   queue: AsyncQueue<string>,
   writer: ReturnType<typeof createSSEWriter>,
   ttsIterator: AsyncIterator<Uint8Array>,
-): Promise<UsageEvent> {
+): Promise<LLMDrainResult> {
+  let fullText = "";
+
   try {
     for await (const delta of llmStream) {
+      fullText += delta;
       await writer.write("text", { delta });
       queue.push(delta);
     }
 
     queue.close();
     const result = await llmStream.done;
-    return result.usage;
+    return { usage: result.usage, fullText };
   } catch (error) {
     queue.close();
     await ttsIterator.return?.();
@@ -284,6 +294,44 @@ class AsyncQueue<T> implements AsyncIterable<T> {
   }
 }
 
+async function persistSessionTurnPair(
+  db: AppDatabase,
+  input: {
+    sessionId: string;
+    userContent: string;
+    assistantContent: string;
+  },
+): Promise<void> {
+  if (input.assistantContent.trim().length === 0) {
+    return;
+  }
+
+  await db.transaction(async (tx) => {
+    const [row] = await tx
+      .select({
+        maxTurnIdx: sql<number | null>`max(${schema.sessionTurns.turnIdx})`,
+      })
+      .from(schema.sessionTurns)
+      .where(eq(schema.sessionTurns.sessionId, input.sessionId));
+    const baseTurnIdx = (row?.maxTurnIdx ?? -1) + 1;
+
+    await tx.insert(schema.sessionTurns).values([
+      {
+        sessionId: input.sessionId,
+        turnIdx: baseTurnIdx,
+        role: "user",
+        content: input.userContent,
+      },
+      {
+        sessionId: input.sessionId,
+        turnIdx: baseTurnIdx + 1,
+        role: "assistant",
+        content: input.assistantContent,
+      },
+    ]);
+  });
+}
+
 export function createSessionsRouter(
   db: AppDatabase,
   llm: LLMClient,
@@ -363,7 +411,16 @@ export function createSessionsRouter(
 
       if (!tts) {
         try {
-          const llmUsage = await drainLLMText(llm, llmOptions, writer);
+          const { usage: llmUsage, fullText } = await drainLLMText(
+            llm,
+            llmOptions,
+            writer,
+          );
+          await persistSessionTurnPair(db, {
+            sessionId,
+            userContent: validation.message,
+            assistantContent: fullText,
+          });
           await writer.write("usage", { llm: llmUsage, tts: null });
           await writer.write("done", {});
         } catch (error) {
@@ -386,8 +443,9 @@ export function createSessionsRouter(
       const audioTask = drainTTSStream(ttsIterator, ttsStream.done, writer);
 
       let llmUsage: UsageEvent;
+      let fullText: string;
       try {
-        llmUsage = await textTask;
+        ({ usage: llmUsage, fullText } = await textTask);
       } catch (error) {
         void ttsStream.done.catch(() => undefined);
         void audioTask.catch(() => undefined);
@@ -397,6 +455,11 @@ export function createSessionsRouter(
       }
 
       const ttsUsage = await audioTask;
+      await persistSessionTurnPair(db, {
+        sessionId,
+        userContent: validation.message,
+        assistantContent: fullText,
+      });
       const usage: TurnUsageEvent = { llm: llmUsage, tts: ttsUsage };
       await writer.write("usage", usage);
       await writer.write("done", {});
