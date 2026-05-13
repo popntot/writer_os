@@ -137,13 +137,15 @@ The agent's craft is informed by deep writing-craft principles (clarity per Albr
 60. As a writer, I want to set the default audio retention policy, so that I control storage and privacy.
 61. As a writer, I want to disable session recording globally for projects with sensitive content, so that I have IP control.
 
-### Build / development workflow (AFK)
+### Build / development workflow (delegated cycle)
 
-62. As the developer, I want issues to be specified with explicit acceptance tests and scope boundaries, so that AFK Codex agents can ship them without judgment calls.
+Per [ADR-0005](adr/0005-subscription-funded-local-harness.md), the build runs on a local, subscription-funded harness with Will at the keyboard for every cycle. These stories describe that delegated-cycle pattern, not an autonomous cloud loop.
+
+62. As the developer, I want issues to be specified with explicit acceptance tests and scope boundaries, so that Codex can ship them without judgment calls and Claude Code can review against a concrete contract.
 63. As the developer, I want Claude Code to review every Codex PR before merge, so that architectural drift is caught early.
-64. As the developer, I want the AFK loop to fail loud (escalate to me) when issues can't be resolved automatically, so that progress isn't silently stalled.
+64. As the developer, I want the loop to fail loud (in-session escalation to me) when issues can't be resolved automatically, so that progress isn't silently stalled.
 65. As the developer, I want a single AGENTS.md at repo root that both Claude and Codex read before any work, so that context stays consistent across tools.
-66. As the developer, I want observability into the AFK loop (which issues shipped, which got stuck, which PRs are in review), so that I can quickly orient when I return.
+66. As the developer, I want observability into the cycle (which issues shipped, which got stuck, which PRs are in review, where Claude Code took over from Codex), so that I can self-calibrate the harness over time.
 
 ## Implementation Decisions
 
@@ -155,7 +157,7 @@ The agent's craft is informed by deep writing-craft principles (clarity per Albr
 - **Database + storage**: Supabase — Postgres for structured records, pgvector for embeddings, Storage for blobs. Single managed service.
 - **Web hosting**: Cloudflare Pages or Vercel.
 - **iOS distribution**: TestFlight at MVP.
-- **AI orchestration (build harness)**: Sandcastle, configured with `parallel-planner-with-review` template, Vercel sandbox provider, Codex as implementer, Claude Code (Opus, high effort) as reviewer.
+- **AI orchestration (build harness)**: Local `parallel-planner-with-review` pattern on Will's Mac — Claude Code (Opus 4.7, high effort) plans + reviews; Codex CLI (GPT-5.4) implements first pass. Subscription-funded, no cloud sandbox. See [ADR-0005](adr/0005-subscription-funded-local-harness.md).
 
 ### Spine model
 
@@ -263,6 +265,19 @@ Display: subtle indicator on Project card; click-through to detail view explaini
 - **Markdown editor on web** (Tiptap or CodeMirror 6). No rich text at MVP.
 - **Explicit save** (Cmd-S, button), not auto-save — agent gets a clean post-edit signal.
 
+### Agent-internal artifact craft (Pocock-derived moves)
+
+Per [ADR-0006](adr/0006-agent-internal-craft-moves.md), the agent layer's craft is operationalized — not just principled — using moves derived from Matt Pocock's writing skills. Scope: how the agent builds **its own internal artifacts** (TrueLine deltas, source synthesis docs, framework notes, mid-session fact-capture). User-facing artifact craft is deferred to the ArtifactGenerator (#17) interface lock.
+
+- **Fragment framework** (from `writing-fragments`). Used wherever the agent mines heterogeneous material — mid-session capture, extended source synthesis, framework-note construction. Append-only, `\n---\n` separator, no taxonomy at capture time. Bar: "is this a useful future-self memory?" not "is this polished prose?" Novelist's-diary mental model.
+- **Shape moves** (from `writing-shape`). Used wherever the agent consolidates fragments into a narrative document. Pile-as-quarry-not-script. At branching decisions, generate 2–3 candidate framings with different implied theses, pick one, log the rationale. Grow paragraph-by-paragraph asking *"what does the next reader (likely the agent itself next session) need to hear next?"* Argue format choices (prose vs list vs callout vs table vs quote vs code) deliberately.
+- **DAG-of-information** (from `edit-article`). Used for the current-state TrueLine document (≤5–10k tokens) and any compaction pass. Section order respects dependencies. The token cap forces ruthless dependency pruning — the compaction *is* a craft pass, not a truncation.
+- **Re-read-before-write** (across all four skills, **mandatory**). Any agent-internal artifact write reads the current state immediately before committing and merges into it. Conflicts surface as out-of-sync indicators (per §"Out-of-sync detection" rule #2), not silent overwrites. Load-bearing for async consolidation.
+- **240-character paragraph cap** as base-agent default for agent-internal prose. Override only with a deliberate craft reason. Encoded as system-prompt guidance, not a post-truncator.
+- **Beats** (from `writing-beats`) are **not** adopted for agent-internal artifacts. Beats are for reader-journey narrative; agent-internal artifacts are reference documents.
+
+These moves live in `packages/prompts` once that workspace lands (per §"High-level architecture"). System-prompt files are the operational locus; ADR-0006 is the rationale; this section is the PRD-level summary.
+
 ### Honesty principles (encoded in system prompts)
 
 - Get to the point — no filler, no preamble.
@@ -271,14 +286,16 @@ Display: subtle indicator on Project card; click-through to detail view explaini
 - Surface failures — consolidation errors are visible, not hidden.
 - Defer to user voice — agent supports the writer's craft and worldview, doesn't impose its own.
 
-### Build approach (AFK)
+### Build approach (delegated cycle)
+
+Per [ADR-0005](adr/0005-subscription-funded-local-harness.md), the build runs on a local, subscription-funded harness. Cloud Sandcastle as the target runtime is rejected, not deferred.
 
 - **Repository substrate**: `AGENTS.md` at repo root, read by all agents before any work. Encodes architecture, conventions, deep-module rules, test-as-success-criterion principle.
-- **Issue contracts**: every issue specifies preconditions, expected behavior, postconditions, test list. No taste-call issues for AFK; those get pre-resolved into specs by Claude Code first.
+- **Issue contracts**: every issue specifies preconditions, expected behavior, postconditions, test list. No taste-call issues for delegated cycles; those get pre-resolved into specs by Claude Code first, or surfaced as in-session escalations.
 - **Tests are success criterion**: PRs ship when test list is green. Output validated via Zod schemas where structured output applies.
-- **Sandcastle config**: `parallel-planner-with-review` template, Codex as implementer, Claude Code (Opus, high effort) as reviewer, Vercel sandbox for isolation, max iterations capped per-issue.
-- **Escalation**: Claude reviewer tags PRs as "needs human" when blocked. Notifications via Slack/email webhook.
-- **Observability**: Sandcastle's `result.iterations`, `result.commits`, `.sandcastle/logs/` provide AFK status reports.
+- **Harness config**: local Claude Code (Opus 4.7, high effort) plans + reviews; Codex CLI (GPT-5.4) implements first pass. See [`docs/agents/harness.md`](agents/harness.md) for the three-outcome review rule and pass budget.
+- **Escalation**: in-session is the default — Claude Code surfaces the decision in chat with options + recommendation. Async `ready-for-human` ritual is reserved per AGENTS.md §"Escalation."
+- **Observability**: session log (`docs/session-log.md`) is the human-readable trail — what shipped, what got stuck, where Claude took over from Codex. GitHub Issues + PRs are the structured record.
 - **Deep modules**: Ousterhout principle. Small public interfaces, hidden complexity. Easier for AI agents to test and swap implementations without ripping out callers.
 
 ### Modules

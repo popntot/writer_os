@@ -16,6 +16,8 @@ Order matters. Skip later items only when irrelevant to your task.
    - [ADR-0002 Pipelined voice stack over realtime voice APIs](docs/adr/0002-pipelined-voice-stack.md)
    - [ADR-0003 Cloud-first hybrid storage](docs/adr/0003-cloud-first-hybrid-storage.md)
    - [ADR-0004 One source of truth + interface projection](docs/adr/0004-source-of-truth-and-projection.md)
+   - [ADR-0005 Subscription-funded local harness, not autonomous cloud execution](docs/adr/0005-subscription-funded-local-harness.md)
+   - [ADR-0006 Agent-internal artifact craft (Pocock-derived moves)](docs/adr/0006-agent-internal-craft-moves.md)
 3. [`docs/interfaces/`](docs/interfaces/) — locked module interfaces. Treat these as the API contract; do not alter signatures without a paired update to the doc.
    - [TrueLineStore](docs/interfaces/trueline-store.md)
    - [ConsolidationWorker](docs/interfaces/consolidation-worker.md)
@@ -26,15 +28,13 @@ Order matters. Skip later items only when irrelevant to your task.
 
 ## Build harness
 
-This repo runs a **local parallel-planner-with-review** harness, not a cloud AFK service:
+This repo runs a **local, subscription-funded parallel-planner-with-review** harness. Autonomous cloud execution is explicitly rejected — see [ADR-0005](docs/adr/0005-subscription-funded-local-harness.md).
 
 - **Claude Code (Opus, high effort)** plans, reviews, and orchestrates. Runs on Will's Max subscription.
 - **Codex CLI (GPT-5.4)** implements. Runs on Will's Plus subscription via the `codex` plugin.
-- Both run on Will's Mac. Requires Will at the keyboard to drive cycles. No cloud agents at MVP.
+- Both run on Will's Mac. Will is at the keyboard for every cycle — picks the issue, watches the pass, reviews the PR, merges. This is the steady state, not a stepping stone.
 
 See [`docs/agents/harness.md`](docs/agents/harness.md) for the day-to-day usage pattern, escalation rules, and when to invoke `codex:rescue`.
-
-A cloud AFK harness is a Phase C (post-#10 GO) decision and is not currently provisioned.
 
 ## Agent skills
 
@@ -109,22 +109,30 @@ Test the public interface; don't test internals.
 
 PRs ship when their issue's listed tests are green. Codex agents shouldn't claim "done" without green tests. Reviewers (Claude Code or human) verify the test list matches the issue's acceptance criteria, then verify it passes.
 
-### AFK escalation
+### Escalation
 
-When an agent (Codex or Claude Code in autonomous mode) is blocked or has hit a decision that requires Will, the agent **must NOT guess and proceed**. Instead:
+Per [ADR-0005](docs/adr/0005-subscription-funded-local-harness.md), Will is at the keyboard for every cycle. Escalation has two tiers; the in-session tier is the default.
 
-1. Open the PR (or comment on the issue) with the work-in-progress.
-2. Add the `ready-for-human` label.
-3. In the PR description or issue comment, write a `## Escalation` section with:
-   - The exact decision needed (one sentence).
-   - The 2–3 options considered with their trade-offs.
-   - The agent's recommendation if it has one.
-4. Stop. Do not merge a PR labeled `ready-for-human` without Will's explicit comment-approval.
+**In-session escalation (default).** When Claude Code hits a decision that needs Will — ambiguous AC, paid-key blocker about to bite, a locked interface that looks wrong, a schema decision spilling into unsliced modules — Claude Code surfaces it in chat:
 
-Common reasons to escalate:
+1. State the decision in one sentence.
+2. List 2–3 options with trade-offs.
+3. Give a recommended answer.
+4. Wait for Will. Do not guess and proceed.
+
+No PR label, no formal `## Escalation` block — Will is in the conversation. The point is to keep his judgment in the loop without ceremony.
+
+**Async escalation (reserved).** Only when Will has explicitly signaled "I'm stepping away, run as far as you can without me" — or the slice has reached an impossible-without-Will checkpoint (real-device verification, real-walk validation, paid-key provisioning) and Will isn't reachable in the same session:
+
+1. Reach a safe checkpoint (tests green, branch pushed, PR open with WIP work).
+2. Label the PR `ready-for-human`.
+3. Write a `## Escalation` section in the PR description with: the decision, the 2–3 options + trade-offs, the recommendation.
+4. Stop. Do not merge a `ready-for-human` PR without Will's explicit comment-approval.
+
+Common reasons to escalate (either tier):
 
 - Acceptance criteria are ambiguous or contradictory.
-- Implementation requires a paid API key not yet provisioned (flag in PR + label `ready-for-human` so Will can provision before unblocking).
+- Implementation requires a paid API key not yet provisioned.
 - A locked module interface in `docs/interfaces/` looks wrong for the implementation reality.
 - A schema decision affects multiple unsliced future modules.
 - The slice's "demoable" criterion is impossible to test without Will (e.g. real-walk verification).

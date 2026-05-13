@@ -128,3 +128,19 @@ Hand-crafted session transcripts of varied shapes — short walks, long walks, w
 - Streaming progress / SSE — only if the UI needs sub-status visibility beyond "queued / in-progress / completed."
 - `processIncremental(sessionId)` for mid-flow heavy passes — only if the hybrid model needs heavier-than-light mid-session work, which the PRD does not currently require.
 - Per-Project consolidation queue depth limits — only if multi-session bursts cause queue pressure in practice.
+
+## Craft contract (per ADR-0006)
+
+The TrueLine delta and the post-session summary are agent-internal artifacts and are constructed using the Pocock-derived moves pinned in [ADR-0006](../adr/0006-agent-internal-craft-moves.md). The interface doesn't enforce these — they live in the consolidation system prompt under `packages/prompts` — but the test fixtures assert their structural shape.
+
+- **Mid-session light consolidation** uses the **fragment framework**. The mid-flow fact-capture buffer is append-only, `\n---\n` separator, no headings inside fragments, no taxonomy at capture time. Heterogeneous by design.
+- **The TrueLine delta** is constructed with **shape moves**: pile-as-quarry from the session transcript + relevant retrieved Sources + the current TrueLine; at internal branching decisions (framing the delta, picking which fragments survive) the prompt generates 2–3 candidates with different implied theses and the decider pass picks one with a logged rationale (captured in `contributionSummary` on the TrueLineStore write).
+- **Compaction of the current-state TrueLine document** (if a write would push the doc past the ~5–10k-token cap) uses **DAG-of-information**: dependency-respecting section ordering, ruthless pruning of items that no longer have downstream dependents. The compaction is a deliberate craft pass, not a truncation.
+- **Re-read-before-write** is mandatory. Immediately before calling `TrueLineStore.applyDelta`, the worker re-reads the current TrueLine and merges its delta into the just-read state. If the version changed between the consolidation's planning phase and its commit, the worker retries from the merge step (bounded retries; on exhaustion, fail and surface via `getStatus`).
+- **240-char paragraph cap** as default for TrueLine prose. Override only with a deliberate craft reason.
+
+Fixture-driven test extensions (per "Fixture-driven test shape" above):
+
+- A **"two-beats-glued-together"** session — assert the consolidation splits it into two distinct TrueLine entries, not one over-long paragraph.
+- A **"stale-TrueLine-mid-consolidation"** scenario — seed an out-of-band TrueLine write during the consolidation's planning phase, assert re-read-before-write fires and either merges successfully or surfaces as failed via `getStatus`.
+- A **"fragment-buffer-mid-session"** trace — assert the mid-session capture retains `---` separators and does not impose taxonomy (no headings, no tags).
