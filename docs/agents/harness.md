@@ -22,7 +22,7 @@ After running tests and reading the diff, Claude Code picks one of three outcome
 2. **Small fix-forward** — Claude Code edits the branch directly. **Cap: ≤1 file substantively changed, or ≤~20 lines of net change.** Typing nits, lint, single-file logic tightening, an `?? null` for `exactOptionalPropertyTypes` — that scale of fix. Beyond the cap → re-prompt instead.
 3. **Re-prompt Codex** — new `codex:rescue` with the specific failure listed. **Budget: 3 Codex passes per slice.** Pass 4 means the delegation prompt is the bug, not Codex. After 3 passes, Claude Code either:
    - **Takes over the remaining surface explicitly** — recorded in the session log as a "Claude took over after N Codex passes" note. This is the harness self-calibration signal: if a third of slices end this way, the delegation pattern is wrong, not Codex.
-   - **Escalates** `ready-for-human` per AGENTS.md §"AFK escalation" if the blocker is a decision, not code.
+   - **Escalates** `ready-for-human` per AGENTS.md §"Escalation" if the blocker is a decision, not code.
 
 The "Claude took over" event is a first-class line in the session log. It's the cheapest measurement of "is Codex pulling its weight in this codebase right now?"
 
@@ -53,7 +53,7 @@ For each issue:
 3. **Claude Code creates the issue branch:** `git checkout -b issue/<number>-<slug>`.
 4. **Claude Code delegates to Codex via `codex:rescue`** with a tight prompt: the acceptance criteria, the locked interfaces involved, files to touch, and the test commands that must pass.
 5. **Codex implements** — writes code and returns the diff. Codex's sandbox is netless: `pnpm install`, `xcodebuild`, and any test that needs network or installed dev-deps cannot run there. Codex may run static checks that work without install, but treat its run as a code-write only.
-6. **Claude Code verifies and reviews** — runs `pnpm install` if dependencies changed, then `pnpm test` and `pnpm typecheck` (and `xcodebuild test` for iOS slices), and reads the diff against the acceptance criteria. If anything fails or any escalation trigger fires (see AGENTS.md §"AFK escalation"), Claude Code does NOT auto-merge — it labels the PR `ready-for-human` and stops, or fix-forwards in the same branch (see below).
+6. **Claude Code verifies and reviews** — runs `pnpm install` if dependencies changed, then `pnpm test` and `pnpm typecheck` (and `xcodebuild test` for iOS slices), and reads the diff against the acceptance criteria. If anything fails or any escalation trigger fires (see AGENTS.md §"Escalation"), Claude Code does NOT auto-merge — it labels the PR `ready-for-human` and stops, or fix-forwards in the same branch (see below).
 7. **Claude Code commits** (Conventional Commits format), pushes the branch, opens a PR with `Closes #<n>` and the AC checklist mirrored from the issue.
 8. **Will reviews and merges** the PR (or rejects with comments → back to step 4).
 9. **Claude Code updates `docs/session-log.md`** with what shipped and the next pickup.
@@ -76,7 +76,7 @@ Do **not** invoke `codex:rescue` when:
 
 ## Escalation triggers
 
-Per AGENTS.md §"AFK escalation," label the PR `ready-for-human` and stop instead of merging when any of these fire:
+Per AGENTS.md §"Escalation," label the PR `ready-for-human` and stop instead of merging when any of these fire:
 
 - Acceptance criteria are ambiguous or contradictory.
 - Implementation requires a key not yet provisioned.

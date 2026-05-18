@@ -405,7 +405,7 @@ Auth is single-tenant at MVP — magic-link login or shared secret, no user mode
 
 This is greenfield — no prior tests in the codebase. Reference patterns from:
 
-- **Sandcastle's own tests** for fixture-driven LLM-adjacent testing
+- **Existing fixture-driven LLM-adjacent test patterns** for prompt orchestration boundaries
 - **Anthropic's TypeScript SDK examples** for streaming response handling
 - **Supabase's testing docs** for local-DB integration tests
 - **shadcn/ui's component test patterns** for the web layer
@@ -486,7 +486,7 @@ Throughout build, recommendations should be informed by subject-matter experts a
 - **Chip & Dan Heath** (*Made to Stick*, *Switch*) — on stickiness baked into agent
 - **Rob Fitzpatrick & Devin Hunt** (*The Workshop Survival Guide*) — on pedagogical structure
 - **Strunk & White** (*The Elements of Style*) — on economy
-- **Matt Pocock** — Sandcastle for AFK orchestration; existing skills (`to-prd`, `to-issues`, `tdd`, `improve-codebase-architecture`) for build flow
+- **Matt Pocock** — local delegated-cycle inspiration and existing skills (`to-prd`, `to-issues`, `tdd`, `improve-codebase-architecture`) for build flow
 
 Product references already informing design:
 
@@ -514,7 +514,7 @@ Product references already informing design:
 4. Set up Supabase project (Postgres + Storage + pgvector enabled)
 5. Provision API keys: Anthropic, ElevenLabs, Voyage AI (or OpenAI for embeddings)
 6. Confirm Apple Developer account active for TestFlight distribution
-7. (Optional) Configure Slack / email webhook for AFK escalation notifications
+7. (Optional) Configure repo notifications for async escalation visibility
 
 ### Next deliverables after this PRD
 
@@ -523,5 +523,5 @@ Product references already informing design:
 - **ADR-0002**: One source of truth + interface projection (not dual data architecture) — captures the data-architecture decision
 - **ADR-0003**: Cloud-first hybrid storage with document-shaped agent layer
 - **ADR-0004**: Pipelined voice stack (Apple Speech + Claude + ElevenLabs) over realtime voice models
-- **Sandcastle harness configuration** in `.sandcastle/`
+- **Local harness docs** in `AGENTS.md` and `docs/agents/harness.md`
 - **Issue slicing** via `/to-issues` skill, producing tracer-bullet vertical slices

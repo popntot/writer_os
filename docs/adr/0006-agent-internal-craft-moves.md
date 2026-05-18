@@ -118,6 +118,6 @@ The writing-beats skill is for reader-journey narrative work. Agent-internal art
 
 ## Notes
 
-The decision at the heart of this ADR: **the agent's craft for building its own memory is consequential enough to pin operationally, not just principially.** The principles named in the PRD (Albrighton, Heath, Fitzpatrick, Strunk) tell the agent *what good looks like*. The Pocock moves tell the agent *what to do with its hands when it sits down to write.*
+The decision at the heart of this ADR: **the agent's craft for building its own memory is consequential enough to pin operationally, not just in principle.** The principles named in the PRD (Albrighton, Heath, Fitzpatrick, Strunk) tell the agent *what good looks like*. The Pocock moves tell the agent *what to do with its hands when it sits down to write.*
 
 Will's hypothesis driving this scope: the leverage is on the brain side, not the user-facing side. Validate or revise at #9 (ConsolidationWorker implementation) — if the moves prove load-bearing for TrueLine quality, this ADR holds. If they prove neutral or counterproductive, revisit and supersede.

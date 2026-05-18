@@ -75,7 +75,7 @@ Single-context. `CONTEXT.md` and `docs/adr/` at repo root, both created lazily. 
 
 - One PR per issue. PR title mirrors the conventional-commit summary; PR body links the issue (`Closes #<n>`).
 - The PR description must enumerate which acceptance criteria from the issue are met. If any are deferred, list them explicitly under a `## Deferred` section.
-- The PR must be **reviewed by Claude Code (Opus)** before merge unless escalated to a human (see "AFK escalation" below).
+- The PR must be **reviewed by Claude Code (Opus)** before merge unless escalated to a human (see "Escalation" below).
 - Squash-merge default. Preserve the issue link in the squash commit body.
 
 ### Versioning
@@ -142,5 +142,5 @@ Common reasons to escalate (either tier):
 The build is sub-funded by default (Claude Max + Codex Plus). When a slice requires paid API access (Anthropic, OpenAI, ElevenLabs) or paid infrastructure (Cloudflare paid plan, Supabase Pro, Apple Developer enrollment), the slice cannot proceed until Will provisions the key. Behavior:
 
 - Claude Code (the planner/reviewer) flags upcoming paid-key blockers in the session log and in conversation **before** the slice claims the key as a dependency.
-- Codex (the implementer) does **not** attempt to circumvent missing keys with mocks or stubs that change the slice's surface area. If a slice's acceptance criteria requires a key Codex doesn't have, escalate per "AFK escalation" rather than proceed.
+- Codex (the implementer) does **not** attempt to circumvent missing keys with mocks or stubs that change the slice's surface area. If a slice's acceptance criteria requires a key Codex doesn't have, escalate per "Escalation" rather than proceed.
 - Stubs are acceptable only when a slice **explicitly** scopes a stub (e.g. issue #11 ships Inbox with a stubbed triage LLM by design — that's a sliced decision, not a workaround).
