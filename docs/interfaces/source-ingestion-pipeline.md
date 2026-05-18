@@ -124,7 +124,16 @@ Per PRD §"Testing Decisions" — real DB, stubbed LLM + stubbed HTTP fetcher. F
 ## Deferred
 
 - `reingest(sourceId)` — only if URL refresh / cache invalidation becomes a real need.
-- Per-source extended synthesis doc — out of this lock; pin owner when the synthesis-update story is decided.
+- Per-source extended synthesis doc — out of this lock; pin owner when the synthesis-update story is decided. When sliced, the synthesis doc is an **agent-internal artifact** and falls under [ADR-0006](../adr/0006-agent-internal-craft-moves.md) — fragment-style, heterogeneous-by-design, re-read-before-write mandatory.
 - OCR for image type — accepted-but-unprocessed per PRD.
 - Multi-language transcription / translation — Apple Speech default at MVP.
 - Custom chunkers per type — single chunker at MVP.
+
+## Craft contract (per ADR-0006)
+
+The pipeline produces **two distinct synthesis artifacts** with different craft contracts:
+
+- **User-facing short summary** (`summary` field on the `sources` row, surfaced to the user via the API projection). Not constrained by ADR-0006 — it's a different artifact with a different consumer. Concise, polished, "what is this Source about" in 1–3 sentences. Craft moves for user-facing artifacts are deferred to the ArtifactGenerator (#17) lock.
+- **Agent-internal extended synthesis doc** (deferred per "Deferred" above, but pinning the contract now). When sliced, this is built using the **fragment framework** per ADR-0006: heterogeneous noticings from the Source — claims, vignettes the Source contains, half-thoughts the agent has about how this Source connects to the project, quoted lines worth keeping around. Append-only, `\n---\n` separator, no taxonomy at capture time. The bar is "useful future-self memory when this Source is retrieved into a session," not "polished prose."
+
+The extended synthesis doc is what the **RAGRetriever** ultimately pulls chunks from at conversation time, alongside the raw chunked content. Building it as fragments rather than as a structured doc preserves the heterogeneity that makes retrieval-time recomposition productive — the agent can mine fragments back into the conversation's voice rather than copy-paste from a pre-structured doc that fights the conversation's flow.

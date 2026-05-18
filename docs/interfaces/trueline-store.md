@@ -106,3 +106,9 @@ interface TrueLineStore {
 - `applyPatch(projectId, patch, ...)` — only if a partial-writer use case appears.
 - `TrueLineSectionIndex` (separate module) — only if section-ref resolution becomes a real query, e.g. when OpenQuestions need to render the linked section inline in the web UI.
 - Soft-delete / project archival semantics — covered when archival is built; out of scope for this interface.
+
+## Decisions taken at implementation time
+
+Append-only log of slice-level decisions that don't reach ADR-bar but a future reader might find surprising. Each entry: one sentence on the decision, link to the PR, two-line rationale.
+
+- **Single-Postgres-table storage (PR #29, issue #7).** Implementation stores TrueLine versions in a single `true_line_versions` Postgres table (PK `(project_id, version)`), not a Supabase Storage blob + Postgres metadata split as the issue AC literally specified. This interface already hides the storage split as an internal detail (see §"Responsibility" — vendor-swappable behind this interface), so a single-table impl satisfies the contract. The hardcoded-delta slice has no large-blob workload to amortize the Storage round-trip cost. A future swap to object storage stays behind the same seam.
