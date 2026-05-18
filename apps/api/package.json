@@ -14,6 +14,7 @@
     "@writer-os/db": "workspace:*",
     "@writer-os/llm": "workspace:*",
     "@writer-os/shared-types": "workspace:*",
+    "@writer-os/tts": "workspace:*",
     "drizzle-orm": "^0.36.0",
     "hono": "^4.6.0"
   },

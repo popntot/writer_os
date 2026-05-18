@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { createTrueLineStore, type AppDatabase } from "@writer-os/db";
 import type { LLMClient } from "@writer-os/llm";
+import { createTTSStreamer, type TTSStreamer } from "@writer-os/tts";
 import { createDbForWorker } from "./db.js";
 import type { Env } from "./env.js";
 import { createLLMForWorker } from "./llm.js";
@@ -9,9 +10,22 @@ import { createHealthRouter } from "./routes/health.js";
 import { createProjectsRouter } from "./routes/projects.js";
 import { createSessionsRouter } from "./routes/sessions.js";
 
+export type TTSStreamerFactory = (env: Env) => TTSStreamer | null;
+
+export function createTTSForWorker(env: Env): TTSStreamer | null {
+  const apiKey = env.ELEVENLABS_API_KEY?.trim();
+
+  if (!apiKey) {
+    return null;
+  }
+
+  return createTTSStreamer({ apiKey });
+}
+
 export function createApp(
   db: AppDatabase,
   llm: LLMClient,
+  createTTS: TTSStreamerFactory = createTTSForWorker,
 ): Hono<{ Bindings: Env }> {
   const trueLineStore = createTrueLineStore(db);
   const app = new Hono<{ Bindings: Env }>();
@@ -20,7 +34,7 @@ export function createApp(
   app.use("/projects/*", authMiddleware);
   app.use("/sessions/*", authMiddleware);
   app.route("/projects", createProjectsRouter(db, trueLineStore));
-  app.route("/", createSessionsRouter(db, llm, trueLineStore));
+  app.route("/", createSessionsRouter(db, llm, trueLineStore, createTTS));
   return app;
 }
 
@@ -35,7 +49,7 @@ export default {
     // and schedule connection cleanup via waitUntil.
     const handle = createDbForWorker(env);
     const llm = createLLMForWorker(env);
-    const app = createApp(handle.db, llm);
+    const app = createApp(handle.db, llm, createTTSForWorker);
     try {
       return await app.fetch(request, env);
     } finally {
