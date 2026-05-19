@@ -6,6 +6,7 @@ struct ChatView: View {
 
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var configStore: AppConfigStore
+    @EnvironmentObject private var settingsStore: SettingsStore
 
     @StateObject private var voiceController = VoiceSessionController()
     @State private var audioPlayback: any AudioPlaying
@@ -175,6 +176,9 @@ struct ChatView: View {
             let client = APIClient(config: config)
             let createdSession = try await client.createSession(projectId: projectId)
             session = createdSession
+            await voiceController.startSession(
+                audioCaptureDefault: settingsStore.settings?.audioCaptureDefault ?? false
+            )
             sessionEndCoordinator.startMonitoring(
                 endSession: {
                     let client = try makeClient()
