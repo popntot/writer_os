@@ -109,6 +109,22 @@ actor APIClient {
         return try JSONDecoder().decode(InboxItem.self, from: data)
     }
 
+    func getSettings() async throws -> Settings {
+        let request = makeRequest(path: "/settings", method: "GET")
+        let (data, response) = try await perform(request)
+        try Self.assertStatus(response, expected: 200, data: data)
+        return try JSONDecoder().decode(Settings.self, from: data)
+    }
+
+    func updateSettings(patch: SettingsPatch) async throws -> Settings {
+        var request = makeRequest(path: "/settings", method: "PATCH")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(patch)
+        let (data, response) = try await perform(request)
+        try Self.assertStatus(response, expected: 200, data: data)
+        return try JSONDecoder().decode(Settings.self, from: data)
+    }
+
     func health() async throws {
         let url = config.apiBaseURL.appendingPathComponent("/health")
         let request = URLRequest(url: url)
