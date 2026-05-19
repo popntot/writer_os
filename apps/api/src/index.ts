@@ -14,6 +14,7 @@ import { authMiddleware } from "./middleware/auth.js";
 import { createHealthRouter } from "./routes/health.js";
 import { createInboxRouter } from "./routes/inbox.js";
 import { createProjectsRouter } from "./routes/projects.js";
+import { createSettingsRouter } from "./routes/settings.js";
 import { createSessionsRouter } from "./routes/sessions.js";
 
 export type TTSStreamerFactory = (env: Env) => TTSStreamer | null;
@@ -51,6 +52,8 @@ export function createApp(
   app.use("/projects/*", authMiddleware);
   app.use("/inbox", authMiddleware);
   app.use("/inbox/*", authMiddleware);
+  app.use("/settings", authMiddleware);
+  app.use("/settings/*", authMiddleware);
   app.use("/sessions/*", authMiddleware);
   app.route(
     "/projects",
@@ -61,6 +64,7 @@ export function createApp(
     createSessionsRouter(db, llm, trueLineStore, createTTS, consolidationWorker),
   );
   app.route("/inbox", createInboxRouter(db, inboxEngine));
+  app.route("/settings", createSettingsRouter(db));
   return app;
 }
 
