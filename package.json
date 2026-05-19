@@ -19,6 +19,7 @@
     "api:dev": "pnpm --filter @writer-os/api dev",
     "ios:generate": "cd apps/ios && xcodegen generate",
     "ios:open": "open apps/ios/WriterOS.xcodeproj",
+    "ios:build": "bash scripts/ios-build.sh",
     "ios:test": "cd apps/ios && xcodebuild -project WriterOS.xcodeproj -scheme WriterOS -destination 'platform=iOS Simulator,name=iPhone 17,OS=latest' test"
   },
   "devDependencies": {
