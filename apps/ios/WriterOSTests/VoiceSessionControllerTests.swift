@@ -28,6 +28,26 @@ final class VoiceSessionControllerTests: XCTestCase {
     }
 
     @MainActor
+    func testStartSessionWithAudioCaptureDefaultFalseDoesNotStartRecording() async {
+        let recognizer = FakeSpeechRecognizer(permissionResult: nil)
+        let controller = VoiceSessionController(recognizer: recognizer)
+
+        await controller.startSession(audioCaptureDefault: false)
+
+        XCTAssertEqual(controller.state, .idle)
+    }
+
+    @MainActor
+    func testStartSessionWithAudioCaptureDefaultTrueStartsRecording() async {
+        let recognizer = FakeSpeechRecognizer()
+        let controller = VoiceSessionController(recognizer: recognizer)
+
+        await controller.startSession(audioCaptureDefault: true)
+
+        XCTAssertEqual(controller.state, .recording)
+    }
+
+    @MainActor
     func testPermissionDeniedTransitionsToErrorState() async {
         let recognizer = FakeSpeechRecognizer(permissionResult: .micDenied)
         let controller = VoiceSessionController(recognizer: recognizer)

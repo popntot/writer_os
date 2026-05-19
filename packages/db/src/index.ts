@@ -14,6 +14,8 @@ export type {
   NewInboxItemRow,
   EmbeddingRow,
   NewEmbeddingRow,
+  Settings,
+  NewSettings,
 } from "./schema.js";
 export {
   createNodeClient,
@@ -43,3 +45,4 @@ export {
   type TrueLineVersionMeta,
   type ApplyDeltaInput,
 } from "./trueline-store.js";
+export { createSettingsStore, type SettingsStore } from "./settings-store.js";

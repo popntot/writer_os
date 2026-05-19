@@ -73,6 +73,11 @@ final class VoiceSessionController: ObservableObject {
         }
     }
 
+    func startSession(audioCaptureDefault: Bool) async {
+        guard audioCaptureDefault else { return }
+        await startRecording()
+    }
+
     func reset() {
         operationID = UUID()
         recognitionSession?.cancel()
