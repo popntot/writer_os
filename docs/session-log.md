@@ -4,6 +4,59 @@ Reverse-chronological log of work shipped across sessions. Each entry: what got 
 
 ---
 
+## 2026-05-18 (session 7) — Merge train cleared (#37/#34/#35); Stream B (#11) shipped via parallel-streams-v2
+
+**Context:** First session using the `parallel-streams-v2` skill (Claude as Queen orchestrating Codex workers in git worktrees). Three PRs had been open since session 6 (2026-05-12). Goal: land the merge train and unblock the next ready-for-agent slice.
+
+**Shipped:**
+
+- **PR #37 merged as `5a73f93`** — ADR-0005 (subscription-funded local harness) + ADR-0006 (agent-internal craft moves) + agent-internal craft contracts. Docs only.
+- **PR #34 merged as `84bec32`** — Issue #8 voice loop closed. SSE-streaming `/turn` with interleaved text+audio, ElevenLabs TTS, Apple Speech STT on iOS, tap-toggle PTT, SessionEndCoordinator (wrap-up button + silence timer + sync-now). 51 backend + 6 iOS test suites green at merge.
+  - **HITL demo deferred** per operator decision. The "tap PTT, speak, hear Claude" AC remains unticked. Backend SSE wiring + TTS streamer + LLM streaming all unit-tested, but iOS audio path (`AudioPlaybackEngine`, `SSEStreamConsumer`, `VoiceSessionController`) only verified against mocked protocols. Risk: a real-device break only surfaces at #10 smoke test.
+- **PR #35 merged as `922bae9`** — Issue #9 ConsolidationWorker closed. `/end` now enqueues real LLM-driven consolidation via `worker.enqueue` + `ctx.waitUntil` (production) or fire-and-forget promise (PGlite tests / local dev). New endpoints: `GET /sessions/:id/consolidation`, `POST /sessions/:id/consolidation/retry`. `POST /projects/:id/sessions` moved to projects router and returns `previousConsolidation` for race handling. New `packages/consolidation` workspace package + 7 fixture-driven property tests.
+  - **PR #35 needed manual rebase + conflict resolution.** Conflict in `apps/api/src/routes/sessions.ts` between #34's SSE-streaming `/turn` (HEAD) and #35 Pass A's `persistSessionTurnPair` (which had been written against the OLD non-streaming shape). Resolution: changed `drainLLMText` and `drainLLMStream` to return `{ usage, fullText }`, added `persistSessionTurnPair(db, { sessionId, userContent, assistantContent: fullText })` call after each successful drain (TTS and no-TTS branches). Pre-stream errors emit `error`/`done` SSE events with no persistence — matching the invariant "only persist on successful LLM completion." Adjusted three tests in `apps/api/test/sessions.test.ts` to expect SSE response shape (200 with `error` event) instead of #35's original 500 JSON shape. Pass C (consolidation wiring) also conflicted on `createSessionsRouter` signature — resolved by adding both `createTTS: TTSStreamerFactory` and `worker: ConsolidationWorker` parameters; updated `apps/api/src/index.ts` to wire both.
+- **68 backend tests green at session end**: 8 llm + 9 tts + 6 db (TrueLine) + 7 consolidation + 8 projects + 30 sessions. `pnpm typecheck` green across all 11 workspace tasks.
+
+**Stream B shipped: PR #38 merged as `2587803`.** Issue #11 closed. The slice ships text deposits, stubbed triage (most-recent-project, confidence 0.5), text SourceIngestionPipeline, pgvector schema with PGlite fallback, `/inbox` REST endpoints, iOS Dump + Pending screens, 9 vitest integration tests + 3 new iOS XCTests. 77 backend tests + 28 iOS XCTests green at merge.
+
+**Stream B execution notes (Codex worker):**
+- Job ID `task-mpbwh9jk-75g673`. Worktree at `/Users/williamgreen/Code/writer_os-stream-b` (now removed). Prompt at `docs/streams/stream-b-inbox-foundation.prompt.md`. Worker handoff persisted at `docs/handoffs/stream-b-inbox-foundation.md`.
+- Worker hit two predictable walls: (1) `pnpm install` failed inside the netless Codex sandbox — reviewer ran install + tests as the harness expects; (2) Codex couldn't write `.git/index.lock` on the parent worktree, so no commits landed. Files were applied to the working tree and Claude Code committed on its behalf as the 5 logical passes Codex would have produced.
+- Five reviewer fix-forwards before commit (all <5 LOC, all within harness "single-file fix-forward" cap): drizzle `.returning(columnsMap)` not supported by pinned version → `.returning()` ×3; narrowed `RawContent` discriminant via const extraction; missing `InboxTriageEngine` re-export; `exactOptionalPropertyTypes` strictness on a test helper; `passWithNoTests: true` on `packages/inbox/vitest.config.ts` (the package's tests live in `apps/api/test/inbox.test.ts`). Documented in PR #38 body.
+
+**Parallel-streams-v2 process notes (first run):**
+
+- The skill's hard preconditions (git repo, codex CLI, codex-companion runtime) all passed without intervention.
+- The "operator approval gate" worked as designed — surfaced PR state, dependency conflicts, and HITL gates to Will, who picked focus (merge train + one codex stream) and HITL strategy (defer #34 device demo).
+- The "real conflict, stop and ask operator" path triggered correctly when #35 wouldn't rebase cleanly. Operator picked manual resolution over spawning a reconciliation codex worker — appropriate for load-bearing code.
+- Codex's netless sandbox surfaced cleanly: it ran static tools fine, hit `ENOTFOUND` on `pnpm install` as expected, and stayed productive by reading rather than installing. Reviewer-runs-tests pattern from `docs/agents/harness.md` is the right one.
+- One open question for next iteration: should the operator approval gate also gate the dispatch (currently approved together with the cut)? Worth re-reading parallel-streams-v2 SKILL.md after a few cycles for refinements.
+
+**Next session pickup, in order:**
+
+1. **Stream B review gate.** When `task-mpbwh9jk-75g673` exits: read `docs/handoffs/stream-b-inbox-foundation.md`, run `pnpm install / pnpm test / pnpm typecheck` in the worktree, review diff against locked InboxTriageEngine invariants 1–8, decide pass / fix-forward / re-prompt. On pass, surface to Will for merge approval.
+2. **#34 iPhone HITL demo (deferred from this session).** Tap PTT, speak, hear Claude reply via ElevenLabs. If broken, fix-forward; if green, mark the AC.
+3. **#10 — Real-walk smoke test (HITL GO/NO-GO).** Will only. Gates Phase B → Phase C readiness. Should follow #34 HITL.
+4. **Next codex stream candidates (queued post-Stream B):**
+   - **Stream C — TestFlight readiness** (#22). `apps/ios/*` only. Low coupling. Codex-able.
+   - **Stream D — Settings** (#18). Audio defaults, retention, location tag. Small API + iOS Settings view.
+5. **Possible architectural reflection point (raised mid-session, not actioned).** Will floated whether v0.1 could be a web app instead of iOS to reduce friction. Conclusion: agent layer is web-shaped already (would migrate cleanly), but walking-with-AirPods can't validate as a PWA (Safari kills mic+audio on screen lock). Defensible reframe: flip Phase 1 ↔ Phase 1.5 and build desk-side web first, productize iOS after substrate is proven. Will chose to stay the course; flagged here so the option is on the table if iOS friction compounds.
+
+**Open threads / things to remember:**
+
+- All open threads from sessions 1–6 still apply.
+- Codex worker logs live at `/Users/williamgreen/.claude/plugins/data/codex-openai-codex/state/writer_os-stream-b-90a2abb6c54cec12/jobs/task-mpbwh9jk-75g673.log` — useful for forensics if the review uncovers something the handoff doesn't explain.
+- The merge train deleted local branches `issue/8-voice-loop` and `issue/9-consolidation-worker` (already gone). PR #36 (Cursor draft from 2026-05-09) is still open and looks abandoned — worth confirming with Will whether to close.
+- Test totals trajectory: session 5 ended at 36 backend tests; this session ends at 68. Stream B should push that to 80+ once merged.
+
+**Session metrics (for self-calibration):**
+
+- Length: ~2.5h of active orchestration plus codex worker runtime (~1h in flight at log time).
+- Output: 3 PRs merged, 1 codex stream dispatched, parallel-streams-v2 first run validated, manual rebase conflict resolution across 3 files (`sessions.ts`, `sessions.test.ts`, `index.ts`).
+- Subjective quality: solid. The merge conflict was load-bearing and required careful manual resolution; doing it by hand rather than spawning a reconciliation worker was the right call. The HITL defer on #34 is the one risk-taking move worth tracking — if the iOS audio path is broken, we won't know until #10.
+
+---
+
 ## 2026-05-07 (session 5) — Issue #6 shipped (PR #27 merged); #7 in flight (PR #29); ElevenLabs prepay done
 
 **Shipped today:**
