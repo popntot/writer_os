@@ -8,6 +8,12 @@ export type {
   NewTrueLineVersionRow,
   SessionTurnRow,
   NewSessionTurnRow,
+  SourceRow,
+  NewSourceRow,
+  InboxItemRow,
+  NewInboxItemRow,
+  EmbeddingRow,
+  NewEmbeddingRow,
 } from "./schema.js";
 export {
   createNodeClient,

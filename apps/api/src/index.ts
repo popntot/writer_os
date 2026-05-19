@@ -1,6 +1,10 @@
 import { Hono } from "hono";
 import { createConsolidationWorker } from "@writer-os/consolidation";
 import { createTrueLineStore, type AppDatabase } from "@writer-os/db";
+import {
+  createInboxTriageEngine,
+  createSourceIngestionPipeline,
+} from "@writer-os/inbox";
 import type { LLMClient } from "@writer-os/llm";
 import { createTTSStreamer, type TTSStreamer } from "@writer-os/tts";
 import { createDbForWorker } from "./db.js";
@@ -8,6 +12,7 @@ import type { Env } from "./env.js";
 import { createLLMForWorker } from "./llm.js";
 import { authMiddleware } from "./middleware/auth.js";
 import { createHealthRouter } from "./routes/health.js";
+import { createInboxRouter } from "./routes/inbox.js";
 import { createProjectsRouter } from "./routes/projects.js";
 import { createSessionsRouter } from "./routes/sessions.js";
 
@@ -34,10 +39,18 @@ export function createApp(
     llm,
     trueLineStore,
   });
+  const sourceIngestionPipeline = createSourceIngestionPipeline({ db });
+  const inboxEngine = createInboxTriageEngine({
+    db,
+    llm,
+    ingestionPipeline: sourceIngestionPipeline,
+  });
   const app = new Hono<{ Bindings: Env }>();
   app.route("/health", createHealthRouter());
   app.use("/projects", authMiddleware);
   app.use("/projects/*", authMiddleware);
+  app.use("/inbox", authMiddleware);
+  app.use("/inbox/*", authMiddleware);
   app.use("/sessions/*", authMiddleware);
   app.route(
     "/projects",
@@ -47,6 +60,7 @@ export function createApp(
     "/",
     createSessionsRouter(db, llm, trueLineStore, createTTS, consolidationWorker),
   );
+  app.route("/inbox", createInboxRouter(db, inboxEngine));
   return app;
 }
 

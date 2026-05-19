@@ -7,7 +7,16 @@ struct RootView: View {
         if configStore.config == nil {
             ConfigSetupView()
         } else {
-            ProjectsView()
+            TabView {
+                ProjectsView()
+                    .tabItem {
+                        Label("Projects", systemImage: "folder")
+                    }
+                InboxView()
+                    .tabItem {
+                        Label("Dump", systemImage: "tray.and.arrow.down")
+                    }
+            }
         }
     }
 }

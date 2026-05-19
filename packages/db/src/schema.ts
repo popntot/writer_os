@@ -1,13 +1,22 @@
 import { sql } from "drizzle-orm";
 import {
   check,
+  customType,
+  index,
   integer,
   pgTable,
   primaryKey,
+  real,
   text,
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+
+const vector1536 = customType<{ data: string }>({
+  dataType() {
+    return "vector(1536)";
+  },
+});
 
 /**
  * Projects — the spine entity. One TrueLine per Project; Articles/Sources/Sessions/OpenQuestions
@@ -149,6 +158,128 @@ export const sessionTurns = pgTable(
   }),
 );
 
+/**
+ * Sources — captured material after inbox ingestion. The inbox engine owns the
+ * project linkage; SourceIngestionPipeline creates rows with projectId null.
+ */
+export const sources = pgTable(
+  "sources",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id").references(() => projects.id, {
+      onDelete: "set null",
+    }),
+    type: text("type").notNull(),
+    title: text("title"),
+    originalUri: text("original_uri"),
+    cachedContentRef: text("cached_content_ref"),
+    summary: text("summary"),
+    embeddingDocRef: text("embedding_doc_ref"),
+    firstSeenAt: timestamp("first_seen_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    lastReferencedAt: timestamp("last_referenced_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    typeCheck: check(
+      "sources_type_check",
+      sql`${table.type} in ('url', 'pdf', 'text', 'voice-memo', 'image', 'book-reference')`,
+    ),
+  }),
+);
+
+/**
+ * Inbox items — the state-machine surface for captured material before and
+ * during project filing.
+ */
+export const inboxItems = pgTable(
+  "inbox_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    rawContentRef: text("raw_content_ref").notNull(),
+    contentType: text("content_type").notNull(),
+    captureSurface: text("capture_surface").notNull(),
+    status: text("status").notNull().default("captured"),
+    decisionKind: text("decision_kind"),
+    decisionProjectId: uuid("decision_project_id").references(
+      () => projects.id,
+      { onDelete: "set null" },
+    ),
+    decisionSourceId: uuid("decision_source_id").references(() => sources.id, {
+      onDelete: "set null",
+    }),
+    confidence: real("confidence"),
+    agentReasoning: text("agent_reasoning"),
+    resolvedProjectId: uuid("resolved_project_id").references(
+      () => projects.id,
+      { onDelete: "set null" },
+    ),
+    sourceId: uuid("source_id").references(() => sources.id, {
+      onDelete: "set null",
+    }),
+    proposedProjectId: uuid("proposed_project_id").references(
+      () => projects.id,
+      { onDelete: "set null" },
+    ),
+    depositedAt: timestamp("deposited_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    triagedAt: timestamp("triaged_at", { withTimezone: true }),
+    filedAt: timestamp("filed_at", { withTimezone: true }),
+    lastActionAt: timestamp("last_action_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    statusLastActionIdx: index("inbox_items_status_last_action_at_idx").on(
+      table.status,
+      table.lastActionAt,
+    ),
+    statusDepositedIdx: index("inbox_items_status_deposited_at_idx").on(
+      table.status,
+      table.depositedAt,
+    ),
+    contentTypeCheck: check(
+      "inbox_items_content_type_check",
+      sql`${table.contentType} in ('url', 'pdf', 'text', 'voice-memo', 'image', 'book-reference')`,
+    ),
+    captureSurfaceCheck: check(
+      "inbox_items_capture_surface_check",
+      sql`${table.captureSurface} in ('ios-share-sheet', 'ios-app-dump', 'ios-voice-memo', 'web-drag-drop', 'web-paste', 'web-book-form')`,
+    ),
+    statusCheck: check(
+      "inbox_items_status_check",
+      sql`${table.status} in ('captured', 'triage-failed', 'triaged-auto', 'triaged-pending', 'filed', 'stale')`,
+    ),
+    decisionKindCheck: check(
+      "inbox_items_decision_kind_check",
+      sql`${table.decisionKind} is null or ${table.decisionKind} in ('auto-filed', 'proposed', 'no-match')`,
+    ),
+  }),
+);
+
+/**
+ * Embeddings — pgvector-backed source chunks. Tests use no vector operations;
+ * the migration falls back to a text embedding column when pgvector is absent.
+ */
+export const embeddings = pgTable("embeddings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  sourceChunkId: text("source_chunk_id").notNull(),
+  projectId: uuid("project_id").references(() => projects.id, {
+    onDelete: "set null",
+  }),
+  sourceId: uuid("source_id")
+    .notNull()
+    .references(() => sources.id, { onDelete: "cascade" }),
+  embedding: vector1536("embedding").notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 export type Project = typeof projects.$inferSelect;
 export type NewProject = typeof projects.$inferInsert;
 export type Session = typeof sessions.$inferSelect;
@@ -157,3 +288,9 @@ export type TrueLineVersionRow = typeof trueLineVersions.$inferSelect;
 export type NewTrueLineVersionRow = typeof trueLineVersions.$inferInsert;
 export type SessionTurnRow = typeof sessionTurns.$inferSelect;
 export type NewSessionTurnRow = typeof sessionTurns.$inferInsert;
+export type SourceRow = typeof sources.$inferSelect;
+export type NewSourceRow = typeof sources.$inferInsert;
+export type InboxItemRow = typeof inboxItems.$inferSelect;
+export type NewInboxItemRow = typeof inboxItems.$inferInsert;
+export type EmbeddingRow = typeof embeddings.$inferSelect;
+export type NewEmbeddingRow = typeof embeddings.$inferInsert;
