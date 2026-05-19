@@ -20,6 +20,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@writer-os/consolidation':
+        specifier: workspace:*
+        version: link:../../packages/consolidation
       '@writer-os/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -54,6 +57,28 @@ importers:
       wrangler:
         specifier: ^3.80.0
         version: 3.114.17(@cloudflare/workers-types@4.20260506.1)
+
+  packages/consolidation:
+    dependencies:
+      '@writer-os/db':
+        specifier: workspace:*
+        version: link:../db
+      '@writer-os/llm':
+        specifier: workspace:*
+        version: link:../llm
+      '@writer-os/shared-types':
+        specifier: workspace:*
+        version: link:../shared-types
+      drizzle-orm:
+        specifier: ^0.36.0
+        version: 0.36.4(@cloudflare/workers-types@4.20260506.1)(@electric-sql/pglite@0.2.17)(postgres@3.4.9)
+    devDependencies:
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.19.17)
 
   packages/db:
     dependencies:

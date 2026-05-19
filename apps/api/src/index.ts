@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { createConsolidationWorker } from "@writer-os/consolidation";
 import { createTrueLineStore, type AppDatabase } from "@writer-os/db";
 import type { LLMClient } from "@writer-os/llm";
 import { createTTSStreamer, type TTSStreamer } from "@writer-os/tts";
@@ -28,13 +29,24 @@ export function createApp(
   createTTS: TTSStreamerFactory = createTTSForWorker,
 ): Hono<{ Bindings: Env }> {
   const trueLineStore = createTrueLineStore(db);
+  const consolidationWorker = createConsolidationWorker({
+    db,
+    llm,
+    trueLineStore,
+  });
   const app = new Hono<{ Bindings: Env }>();
   app.route("/health", createHealthRouter());
   app.use("/projects", authMiddleware);
   app.use("/projects/*", authMiddleware);
   app.use("/sessions/*", authMiddleware);
-  app.route("/projects", createProjectsRouter(db, trueLineStore));
-  app.route("/", createSessionsRouter(db, llm, trueLineStore, createTTS));
+  app.route(
+    "/projects",
+    createProjectsRouter(db, trueLineStore, consolidationWorker),
+  );
+  app.route(
+    "/",
+    createSessionsRouter(db, llm, trueLineStore, createTTS, consolidationWorker),
+  );
   return app;
 }
 

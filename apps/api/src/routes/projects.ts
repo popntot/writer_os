@@ -1,12 +1,17 @@
-import { eq } from "drizzle-orm";
+import { and, desc, eq, isNotNull } from "drizzle-orm";
 import { Hono } from "hono";
 import {
   schema,
   type AppDatabase,
   type Project,
+  type Session,
   type TrueLineDocument,
   type TrueLineStore,
 } from "@writer-os/db";
+import type {
+  ConsolidationStatus,
+  ConsolidationWorker,
+} from "@writer-os/consolidation";
 import type { Env } from "../env.js";
 
 interface ProjectResponse {
@@ -32,6 +37,26 @@ interface TrueLineResponse {
   contributionSummary: string | null;
 }
 
+interface SessionResponse {
+  id: string;
+  projectId: string;
+  targetArticleId: string | null;
+  startAt: string;
+  endAt: string | null;
+  audioRef: string | null;
+  transcriptRef: string | null;
+  consolidationStatus: string;
+  summary: string | null;
+}
+
+interface CreateSessionInput {
+  targetArticleId?: string;
+}
+
+interface CreateSessionResponse extends SessionResponse {
+  previousConsolidation: ConsolidationStatus | null;
+}
+
 function serializeProject(project: Project): ProjectResponse {
   return {
     id: project.id,
@@ -40,6 +65,20 @@ function serializeProject(project: Project): ProjectResponse {
     createdAt: project.createdAt.toISOString(),
     archivedAt: project.archivedAt?.toISOString() ?? null,
     mentorRef: project.mentorRef,
+  };
+}
+
+function serializeSession(session: Session): SessionResponse {
+  return {
+    id: session.id,
+    projectId: session.projectId,
+    targetArticleId: session.targetArticleId,
+    startAt: session.startAt.toISOString(),
+    endAt: session.endAt?.toISOString() ?? null,
+    audioRef: session.audioRef,
+    transcriptRef: session.transcriptRef,
+    consolidationStatus: session.consolidationStatus,
+    summary: session.summary,
   };
 }
 
@@ -54,6 +93,33 @@ function serializeTrueLine(doc: TrueLineDocument): TrueLineResponse {
       doc.version === 0 ? null : doc.committedAt.toISOString(),
     contributionSummary: doc.contributionSummary,
   };
+}
+
+function validateCreateSessionBody(
+  body: unknown,
+): CreateSessionInput | string {
+  if (body === null || body === undefined) {
+    return {};
+  }
+
+  if (!isRecord(body)) {
+    return "request body must be an object";
+  }
+
+  if (
+    body.targetArticleId !== undefined &&
+    typeof body.targetArticleId !== "string"
+  ) {
+    return "targetArticleId must be a string";
+  }
+
+  const targetArticleId =
+    typeof body.targetArticleId === "string" &&
+    body.targetArticleId.trim().length > 0
+      ? body.targetArticleId.trim()
+      : undefined;
+
+  return targetArticleId === undefined ? {} : { targetArticleId };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -87,6 +153,7 @@ function validateCreateProjectBody(
 export function createProjectsRouter(
   db: AppDatabase,
   trueLineStore: TrueLineStore,
+  worker: ConsolidationWorker,
 ): Hono<{ Bindings: Env }> {
   const router = new Hono<{ Bindings: Env }>();
 
@@ -113,6 +180,63 @@ export function createProjectsRouter(
     }
 
     return c.json(serializeProject(created), 201);
+  });
+
+  router.post("/:projectId/sessions", async (c) => {
+    const projectId = c.req.param("projectId");
+    const [project] = await db
+      .select({ id: schema.projects.id })
+      .from(schema.projects)
+      .where(eq(schema.projects.id, projectId))
+      .limit(1);
+
+    if (project === undefined) {
+      return c.json({ error: "project not found" }, 404);
+    }
+
+    const body = await c.req.json().catch((): null => null);
+    const validation = validateCreateSessionBody(body);
+
+    if (typeof validation === "string") {
+      return c.json({ error: validation }, 400);
+    }
+
+    const [created] = await db
+      .insert(schema.sessions)
+      .values({
+        projectId,
+        targetArticleId: validation.targetArticleId ?? null,
+        startAt: new Date(),
+        consolidationStatus: "pending",
+      })
+      .returning();
+
+    if (created === undefined) {
+      return c.json({ error: "failed to create session" }, 500);
+    }
+
+    const [previousSession] = await db
+      .select({ id: schema.sessions.id })
+      .from(schema.sessions)
+      .where(
+        and(
+          eq(schema.sessions.projectId, projectId),
+          isNotNull(schema.sessions.endAt),
+        ),
+      )
+      .orderBy(desc(schema.sessions.endAt))
+      .limit(1);
+
+    const previousConsolidation =
+      previousSession === undefined
+        ? null
+        : await worker.getStatus(previousSession.id);
+    const response: CreateSessionResponse = {
+      ...serializeSession(created),
+      previousConsolidation,
+    };
+
+    return c.json(response, 201);
   });
 
   router.get("/:projectId/trueline", async (c) => {

@@ -8,7 +8,13 @@ import {
   expect,
   test,
 } from "vitest";
-import { createPgliteClient, type PgliteHandle } from "@writer-os/db";
+import { eq } from "drizzle-orm";
+import {
+  createPgliteClient,
+  schema,
+  type PgliteHandle,
+  type Session,
+} from "@writer-os/db";
 import type {
   ChatOptions,
   ChatResult,
@@ -33,6 +39,12 @@ const env: Env = {
   ANTHROPIC_API_KEY: "test-anthropic-key",
   ENVIRONMENT: "test",
 };
+
+const consolidatedTrueLine =
+  "The session clarified that the essay should frame attention as a deliberate craft choice.";
+const consolidatedSummary = "Clarified the deliberate-attention thesis.";
+const consolidatedStarter =
+  "Open the next walk by drafting the attention thesis in one sentence.";
 
 let handle: PgliteHandle;
 let app: ReturnType<typeof createApp>;
@@ -69,8 +81,8 @@ function createRecordingLLM(
 ): LLMClient {
   const deltas = options.deltas ?? [reply];
 
-  const buildResult = (): ChatResult => ({
-    text: deltas.join(""),
+  const buildResult = (text: string = deltas.join("")): ChatResult => ({
+    text,
     usage: {
       model: "claude-sonnet-4-6",
       inputTokens: 12,
@@ -88,6 +100,18 @@ function createRecordingLLM(
       if (options.fail) {
         throw options.fail;
       }
+      if (
+        typeof opts.system === "string" &&
+        opts.system.includes("consolidation engine")
+      ) {
+        return buildResult(
+          JSON.stringify({
+            trueLine: consolidatedTrueLine,
+            contributionSummary: consolidatedSummary,
+            nextSessionStarter: consolidatedStarter,
+          }),
+        );
+      }
       return buildResult();
     },
     stream: (opts: ChatOptions): LLMStream => {
@@ -100,6 +124,7 @@ function createRecordingLLM(
             rejectDone = reject;
           })
         : Promise.resolve(result);
+
 
       return {
         done,
@@ -169,6 +194,26 @@ function createStubTTS(options: {
   };
 }
 
+function createFailingLLM(error: Error): LLMClient {
+  return {
+    chat: async (opts: ChatOptions): Promise<ChatResult> => {
+      llmCalls.push(opts);
+      throw error;
+    },
+    stream: (opts: ChatOptions): LLMStream => {
+      llmCalls.push(opts);
+      const done = Promise.reject(error);
+      void done.catch(() => undefined);
+      return {
+        done,
+        async *[Symbol.asyncIterator](): AsyncIterator<string> {
+          throw error;
+        },
+      };
+    },
+  };
+}
+
 async function parseSSE(response: Response): Promise<SSEEvent[]> {
   return parseSSEText(await response.text());
 }
@@ -220,6 +265,78 @@ function decodeBase64(value: string): Uint8Array {
   }
 
   return bytes;
+}
+
+async function createProject(title = "Turn persistence fixture"): Promise<string> {
+  const response = await app.fetch(
+    buildRequest("/projects", {
+      method: "POST",
+      headers: jsonHeaders(),
+      body: JSON.stringify({ title }),
+    }),
+    env,
+  );
+  const body = (await response.json()) as { id: string };
+  return body.id;
+}
+
+async function startSession(projectId: string): Promise<string> {
+  const response = await app.fetch(
+    buildRequest(`/projects/${projectId}/sessions`, {
+      method: "POST",
+      headers: jsonHeaders(),
+      body: "{}",
+    }),
+    env,
+  );
+  const body = (await response.json()) as { id: string };
+  return body.id;
+}
+
+async function readSessionTurns(sessionId: string): Promise<
+  Array<{ turnIdx: number; role: string; content: string }>
+> {
+  return await handle.db
+    .select({
+      turnIdx: schema.sessionTurns.turnIdx,
+      role: schema.sessionTurns.role,
+      content: schema.sessionTurns.content,
+    })
+    .from(schema.sessionTurns)
+    .where(eq(schema.sessionTurns.sessionId, sessionId))
+    .orderBy(schema.sessionTurns.turnIdx);
+}
+
+async function readSession(sessionId: string): Promise<Session> {
+  const [session] = await handle.db
+    .select()
+    .from(schema.sessions)
+    .where(eq(schema.sessions.id, sessionId))
+    .limit(1);
+
+  if (session === undefined) {
+    throw new Error("session not found");
+  }
+
+  return session;
+}
+
+async function drainBackgroundWork(): Promise<void> {
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, 0);
+  });
+}
+
+async function waitForConsolidationCompleted(sessionId: string): Promise<void> {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    await drainBackgroundWork();
+    const session = await readSession(sessionId);
+    if (session.consolidationState === "completed") {
+      return;
+    }
+  }
+
+  throw new Error("consolidation did not complete");
 }
 
 async function applyMigrations(): Promise<void> {
@@ -315,6 +432,7 @@ describe("Writer OS API sessions", () => {
       transcriptRef: null,
       consolidationStatus: "pending",
       summary: null,
+      previousConsolidation: null,
     });
   });
 
@@ -522,6 +640,81 @@ describe("Writer OS API sessions", () => {
     expect(events.at(-1)).toEqual({ event: "done", data: {} });
   });
 
+  test("successful streaming turn persists user and assistant turns", async () => {
+    const persistenceProjectId = await createProject();
+    const sessionId = await startSession(persistenceProjectId);
+
+    const response = await app.fetch(
+      buildRequest(`/sessions/${sessionId}/turn`, {
+        method: "POST",
+        headers: jsonHeaders(),
+        body: JSON.stringify({ message: "Persist this turn." }),
+      }),
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    const events = await parseSSE(response);
+    expect(events.at(-1)).toEqual({ event: "done", data: {} });
+    expect(events.find((event) => event.event === "error")).toBeUndefined();
+
+    expect(await readSessionTurns(sessionId)).toEqual([
+      { turnIdx: 0, role: "user", content: "Persist this turn." },
+      { turnIdx: 1, role: "assistant", content: "Hello from the mentor." },
+    ]);
+  });
+
+  test("Claude error during stream does not persist session turns", async () => {
+    const persistenceProjectId = await createProject();
+    const sessionId = await startSession(persistenceProjectId);
+    const failingApp = createApp(
+      handle.db,
+      createFailingLLM(new Error("claude failed")),
+    );
+
+    const response = await failingApp.fetch(
+      buildRequest(`/sessions/${sessionId}/turn`, {
+        method: "POST",
+        headers: jsonHeaders(),
+        body: JSON.stringify({ message: "This should not persist." }),
+      }),
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    const events = await parseSSE(response);
+    expect(events).toContainEqual({
+      event: "error",
+      data: { message: "claude failed" },
+    });
+    expect(await readSessionTurns(sessionId)).toEqual([]);
+  });
+
+  test("multiple sequential streaming turns increment turnIdx on the same session", async () => {
+    const persistenceProjectId = await createProject();
+    const sessionId = await startSession(persistenceProjectId);
+
+    for (const message of ["First", "Second"]) {
+      const response = await app.fetch(
+        buildRequest(`/sessions/${sessionId}/turn`, {
+          method: "POST",
+          headers: jsonHeaders(),
+          body: JSON.stringify({ message }),
+        }),
+        env,
+      );
+      expect(response.status).toBe(200);
+      await response.text();
+    }
+
+    expect(await readSessionTurns(sessionId)).toEqual([
+      { turnIdx: 0, role: "user", content: "First" },
+      { turnIdx: 1, role: "assistant", content: "Hello from the mentor." },
+      { turnIdx: 2, role: "user", content: "Second" },
+      { turnIdx: 3, role: "assistant", content: "Hello from the mentor." },
+    ]);
+  });
+
   test("POST /sessions/:sessionId/turn returns 404 for unknown session", async () => {
     const response = await app.fetch(
       buildRequest(
@@ -564,7 +757,7 @@ describe("Writer OS API sessions", () => {
     expect(response.status).toBe(401);
   });
 
-  test("POST /sessions/:sessionId/end sets end_at and second call returns 409", async () => {
+  test("POST /sessions/:sessionId/end sets end_at, queues consolidation, and second call returns 409", async () => {
     const firstResponse = await app.fetch(
       buildRequest(`/sessions/${endableSessionId}/end`, {
         method: "POST",
@@ -573,8 +766,19 @@ describe("Writer OS API sessions", () => {
       env,
     );
     expect(firstResponse.status).toBe(200);
-    const firstBody = (await firstResponse.json()) as { endAt: string | null };
+    const firstBody = (await firstResponse.json()) as {
+      endAt: string | null;
+      consolidation: { state: string };
+    };
     expect(firstBody.endAt).not.toBeNull();
+    expect(["queued", "in-progress", "completed"]).toContain(
+      firstBody.consolidation.state,
+    );
+
+    await waitForConsolidationCompleted(endableSessionId);
+    expect((await readSession(endableSessionId)).consolidationState).toBe(
+      "completed",
+    );
 
     const secondResponse = await app.fetch(
       buildRequest(`/sessions/${endableSessionId}/end`, {
@@ -600,6 +804,207 @@ describe("Writer OS API sessions", () => {
     );
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({ error: "session already ended" });
+  });
+
+  test("GET /sessions/:sessionId/consolidation returns current status", async () => {
+    const statusProjectId = await createProject("Consolidation status fixture");
+    const sessionId = await startSession(statusProjectId);
+
+    const response = await app.fetch(
+      buildRequest(`/sessions/${sessionId}/consolidation`, {
+        headers: authHeader(),
+      }),
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      consolidation: { state: "not-started" },
+    });
+  });
+
+  test("GET /sessions/:sessionId/consolidation returns queued, in-progress, completed, and failed states", async () => {
+    const statusProjectId = await createProject("Consolidation states fixture");
+    const queuedSessionId = await startSession(statusProjectId);
+    const inProgressSessionId = await startSession(statusProjectId);
+    const completedSessionId = await startSession(statusProjectId);
+    const failedSessionId = await startSession(statusProjectId);
+    const queuedAt = new Date("2026-05-08T12:00:00.000Z");
+    const startedAt = new Date("2026-05-08T12:01:00.000Z");
+    const completedAt = new Date("2026-05-08T12:02:00.000Z");
+    const failedAt = new Date("2026-05-08T12:03:00.000Z");
+    const nextRetryAt = new Date("2026-05-08T12:08:00.000Z");
+
+    await handle.db
+      .update(schema.sessions)
+      .set({
+        consolidationState: "queued",
+        consolidationQueuedAt: queuedAt,
+        consolidationTrigger: "manual",
+      })
+      .where(eq(schema.sessions.id, queuedSessionId));
+    await handle.db
+      .update(schema.sessions)
+      .set({
+        consolidationState: "in-progress",
+        consolidationStartedAt: startedAt,
+        consolidationTrigger: "manual",
+      })
+      .where(eq(schema.sessions.id, inProgressSessionId));
+    await handle.db
+      .update(schema.sessions)
+      .set({
+        consolidationState: "completed",
+        consolidationCompletedAt: completedAt,
+        consolidationContributionSummary: "Done",
+        consolidationTrueLineVersion: 2,
+      })
+      .where(eq(schema.sessions.id, completedSessionId));
+    await handle.db
+      .update(schema.sessions)
+      .set({
+        consolidationState: "failed",
+        consolidationFailedAt: failedAt,
+        consolidationError: "boom",
+        consolidationRetriesRemaining: 1,
+        consolidationNextRetryAt: nextRetryAt,
+      })
+      .where(eq(schema.sessions.id, failedSessionId));
+
+    const cases = [
+      {
+        sessionId: queuedSessionId,
+        expected: {
+          state: "queued",
+          queuedAt: queuedAt.toISOString(),
+          trigger: "manual",
+        },
+      },
+      {
+        sessionId: inProgressSessionId,
+        expected: {
+          state: "in-progress",
+          startedAt: startedAt.toISOString(),
+          trigger: "manual",
+        },
+      },
+      {
+        sessionId: completedSessionId,
+        expected: {
+          state: "completed",
+          completedAt: completedAt.toISOString(),
+          result: {
+            sessionId: completedSessionId,
+            trueLineVersion: 2,
+            openQuestionsOpened: [],
+            openQuestionsResolved: [],
+            artifactsGenerated: [],
+            nextSessionStarterRef: `project:${statusProjectId}:next-session-starter`,
+            contributionSummary: "Done",
+            completedAt: completedAt.toISOString(),
+          },
+        },
+      },
+      {
+        sessionId: failedSessionId,
+        expected: {
+          state: "failed",
+          failedAt: failedAt.toISOString(),
+          error: "boom",
+          retriesRemaining: 1,
+          nextRetryAt: nextRetryAt.toISOString(),
+        },
+      },
+    ];
+
+    for (const { sessionId, expected } of cases) {
+      const response = await app.fetch(
+        buildRequest(`/sessions/${sessionId}/consolidation`, {
+          headers: authHeader(),
+        }),
+        env,
+      );
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ consolidation: expected });
+    }
+  });
+
+  test("GET /sessions/:sessionId/consolidation returns 404 for unknown session", async () => {
+    const response = await app.fetch(
+      buildRequest(
+        "/sessions/00000000-0000-0000-0000-000000000000/consolidation",
+        { headers: authHeader() },
+      ),
+      env,
+    );
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: "session not found" });
+  });
+
+  test("POST /sessions/:sessionId/consolidation/retry transitions failed to queued", async () => {
+    const retryProjectId = await createProject("Retry fixture");
+    const sessionId = await startSession(retryProjectId);
+    await handle.db
+      .update(schema.sessions)
+      .set({
+        consolidationState: "failed",
+        consolidationFailedAt: new Date("2026-05-08T12:00:00.000Z"),
+        consolidationError: "llm failed",
+        consolidationRetriesRemaining: 2,
+        consolidationNextRetryAt: new Date("2026-05-08T12:05:00.000Z"),
+      })
+      .where(eq(schema.sessions.id, sessionId));
+
+    const response = await app.fetch(
+      buildRequest(`/sessions/${sessionId}/consolidation/retry`, {
+        method: "POST",
+        headers: authHeader(),
+      }),
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      consolidation: { state: string; trigger?: string };
+    };
+    expect(["queued", "in-progress", "completed"]).toContain(
+      body.consolidation.state,
+    );
+    if (body.consolidation.state === "queued") {
+      expect(body.consolidation.trigger).toBe("retry-manual");
+    }
+  });
+
+  test("POST /sessions/:sessionId/consolidation/retry is a no-op for non-failed states", async () => {
+    const retryProjectId = await createProject("Retry no-op fixture");
+    const sessionId = await startSession(retryProjectId);
+
+    const response = await app.fetch(
+      buildRequest(`/sessions/${sessionId}/consolidation/retry`, {
+        method: "POST",
+        headers: authHeader(),
+      }),
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      consolidation: { state: "not-started" },
+    });
+  });
+
+  test("POST /sessions/:sessionId/consolidation/retry returns 404 for unknown session", async () => {
+    const response = await app.fetch(
+      buildRequest(
+        "/sessions/00000000-0000-0000-0000-000000000000/consolidation/retry",
+        { method: "POST", headers: authHeader() },
+      ),
+      env,
+    );
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: "session not found" });
   });
 });
 
@@ -672,8 +1077,17 @@ describe("Writer OS API TrueLine spine round-trip", () => {
     expect(lastCall?.system).toMatch(/the TrueLine is empty/i);
   });
 
-  test("end session 1 → applyDelta writes a hardcoded v1 delta visible at GET /projects/:id/trueline", async () => {
+  test("end session 1 → consolidation writes v1 TrueLine visible at GET /projects/:id/trueline", async () => {
     const sessionId = await startSession(trueLineProjectId);
+    const turnResponse = await app.fetch(
+      buildRequest(`/sessions/${sessionId}/turn`, {
+        method: "POST",
+        headers: jsonHeaders(),
+        body: JSON.stringify({ message: "consolidate this walk" }),
+      }),
+      env,
+    );
+    expect(turnResponse.status).toBe(200);
 
     const endResponse = await app.fetch(
       buildRequest(`/sessions/${sessionId}/end`, {
@@ -683,6 +1097,7 @@ describe("Writer OS API TrueLine spine round-trip", () => {
       env,
     );
     expect(endResponse.status).toBe(200);
+    await waitForConsolidationCompleted(sessionId);
 
     const trueLineResponse = await app.fetch(
       buildRequest(`/projects/${trueLineProjectId}/trueline`, {
@@ -699,9 +1114,9 @@ describe("Writer OS API TrueLine spine round-trip", () => {
       committedAt: string | null;
     };
     expect(body.version).toBeGreaterThanOrEqual(1);
-    expect(body.content).toContain(`Session ${sessionId} ended at`);
+    expect(body.content).toBe(consolidatedTrueLine);
     expect(body.sourceSessionId).toBe(sessionId);
-    expect(body.contributionSummary).toContain(sessionId);
+    expect(body.contributionSummary).toBe(consolidatedSummary);
     expect(body.committedAt).not.toBeNull();
   });
 
@@ -722,7 +1137,7 @@ describe("Writer OS API TrueLine spine round-trip", () => {
     await parseSSE(response);
     const lastCall = llmCalls[callsBefore];
     expect(typeof lastCall?.system).toBe("string");
-    expect(lastCall?.system).toMatch(/Session [0-9a-f-]+ ended at/i);
+    expect(lastCall?.system).toContain(consolidatedTrueLine);
   });
 
   test("GET /projects/:id/trueline 404s for unknown project", async () => {

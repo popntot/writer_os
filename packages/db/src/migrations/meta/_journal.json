@@ -22,6 +22,20 @@
       "when": 1778198402320,
       "tag": "0002_public_tempest",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1778285277463,
+      "tag": "0003_dry_gertrude_yorkes",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1778285743323,
+      "tag": "0004_flippant_blacklash",
+      "breakpoints": true
     }
   ]
 }

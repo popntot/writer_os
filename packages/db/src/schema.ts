@@ -23,6 +23,10 @@ export const projects = pgTable("projects", {
     .defaultNow(),
   archivedAt: timestamp("archived_at", { withTimezone: true }),
   mentorRef: text("mentor_ref"),
+  nextSessionStarter: text("next_session_starter"),
+  nextSessionStarterUpdatedAt: timestamp("next_session_starter_updated_at", {
+    withTimezone: true,
+  }),
 });
 
 export const sessions = pgTable(
@@ -42,12 +46,45 @@ export const sessions = pgTable(
     consolidationStatus: text("consolidation_status")
       .notNull()
       .default("pending"),
+    consolidationState: text("consolidation_state")
+      .notNull()
+      .default("not-started"),
+    consolidationQueuedAt: timestamp("consolidation_queued_at", {
+      withTimezone: true,
+    }),
+    consolidationStartedAt: timestamp("consolidation_started_at", {
+      withTimezone: true,
+    }),
+    consolidationCompletedAt: timestamp("consolidation_completed_at", {
+      withTimezone: true,
+    }),
+    consolidationFailedAt: timestamp("consolidation_failed_at", {
+      withTimezone: true,
+    }),
+    consolidationError: text("consolidation_error"),
+    consolidationTrigger: text("consolidation_trigger"),
+    consolidationRetriesRemaining: integer("consolidation_retries_remaining"),
+    consolidationNextRetryAt: timestamp("consolidation_next_retry_at", {
+      withTimezone: true,
+    }),
+    consolidationContributionSummary: text(
+      "consolidation_contribution_summary",
+    ),
+    consolidationTrueLineVersion: integer("consolidation_true_line_version"),
     summary: text("summary"),
   },
   (table) => ({
     consolidationStatusCheck: check(
       "sessions_consolidation_status_check",
       sql`${table.consolidationStatus} in ('pending', 'running', 'succeeded', 'failed')`,
+    ),
+    consolidationStateCheck: check(
+      "sessions_consolidation_state_check",
+      sql`${table.consolidationState} in ('not-started', 'queued', 'in-progress', 'completed', 'failed')`,
+    ),
+    consolidationTriggerCheck: check(
+      "sessions_consolidation_trigger_check",
+      sql`${table.consolidationTrigger} is null or ${table.consolidationTrigger} in ('session-end', 'manual', 'retry-auto', 'retry-manual')`,
     ),
   }),
 );
@@ -85,9 +122,38 @@ export const trueLineVersions = pgTable(
   }),
 );
 
+/**
+ * Session turns — immutable transcript rows for each user/assistant exchange.
+ * ConsolidationWorker reads these rows after a session ends to synthesize the
+ * next TrueLine delta.
+ */
+export const sessionTurns = pgTable(
+  "session_turns",
+  {
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => sessions.id, { onDelete: "cascade" }),
+    turnIdx: integer("turn_idx").notNull(),
+    role: text("role").notNull(),
+    content: text("content").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.sessionId, table.turnIdx] }),
+    roleCheck: check(
+      "session_turns_role_check",
+      sql`${table.role} in ('user', 'assistant')`,
+    ),
+  }),
+);
+
 export type Project = typeof projects.$inferSelect;
 export type NewProject = typeof projects.$inferInsert;
 export type Session = typeof sessions.$inferSelect;
 export type NewSession = typeof sessions.$inferInsert;
 export type TrueLineVersionRow = typeof trueLineVersions.$inferSelect;
 export type NewTrueLineVersionRow = typeof trueLineVersions.$inferInsert;
+export type SessionTurnRow = typeof sessionTurns.$inferSelect;
+export type NewSessionTurnRow = typeof sessionTurns.$inferInsert;

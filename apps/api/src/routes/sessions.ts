@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { streamSSE, type SSEStreamingApi } from "hono/streaming";
 import {
@@ -14,6 +14,10 @@ import type {
   TTSStreamer,
   TTSUsageEvent,
 } from "@writer-os/tts";
+import type {
+  ConsolidationStatus,
+  ConsolidationWorker,
+} from "@writer-os/consolidation";
 import type { Env } from "../env.js";
 
 interface SessionResponse {
@@ -26,10 +30,6 @@ interface SessionResponse {
   transcriptRef: string | null;
   consolidationStatus: string;
   summary: string | null;
-}
-
-interface CreateSessionInput {
-  targetArticleId?: string;
 }
 
 interface TurnInput {
@@ -45,6 +45,11 @@ interface TurnUsageEvent {
 }
 
 const TTS_AUDIO_FORMAT: AudioFormat = "pcm_16000";
+
+interface EndSessionResponse extends SessionResponse {
+  consolidation: ConsolidationStatus;
+}
+
 
 function serializeSession(session: Session): SessionResponse {
   return {
@@ -62,33 +67,6 @@ function serializeSession(session: Session): SessionResponse {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function validateCreateSessionBody(
-  body: unknown,
-): CreateSessionInput | string {
-  if (body === null || body === undefined) {
-    return {};
-  }
-
-  if (!isRecord(body)) {
-    return "request body must be an object";
-  }
-
-  if (
-    body.targetArticleId !== undefined &&
-    typeof body.targetArticleId !== "string"
-  ) {
-    return "targetArticleId must be a string";
-  }
-
-  const targetArticleId =
-    typeof body.targetArticleId === "string" &&
-    body.targetArticleId.trim().length > 0
-      ? body.targetArticleId.trim()
-      : undefined;
-
-  return targetArticleId === undefined ? {} : { targetArticleId };
 }
 
 function validateTurnBody(body: unknown): TurnInput | string {
@@ -114,18 +92,6 @@ function buildSystemPrompt(trueLine: TrueLineDocument): string {
   return `${header}\n\nTrueLine for this project (canonical understanding so far, version ${trueLine.version}):\n---\n${trueLine.content}\n---`;
 }
 
-function appendHardcodedDelta(
-  currentContent: string,
-  sessionId: string,
-  endedAt: Date,
-): string {
-  const line = `- Session ${sessionId} ended at ${endedAt.toISOString()}`;
-  if (currentContent.trim().length === 0) {
-    return line;
-  }
-  return `${currentContent}\n${line}`;
-}
-
 function hasElevenLabsKey(env: Env): boolean {
   return (env.ELEVENLABS_API_KEY?.trim().length ?? 0) > 0;
 }
@@ -149,20 +115,27 @@ function createSSEWriter(stream: SSEStreamingApi): {
   };
 }
 
+interface LLMDrainResult {
+  usage: UsageEvent;
+  fullText: string;
+}
+
 async function drainLLMText(
   llm: LLMClient,
   opts: Parameters<LLMClient["stream"]>[0],
   writer: ReturnType<typeof createSSEWriter>,
-): Promise<UsageEvent> {
+): Promise<LLMDrainResult> {
   const llmStream = llm.stream(opts);
+  let fullText = "";
 
   try {
     for await (const delta of llmStream) {
+      fullText += delta;
       await writer.write("text", { delta });
     }
 
     const result = await llmStream.done;
-    return result.usage;
+    return { usage: result.usage, fullText };
   } catch (error) {
     await llmStream.done.catch(() => undefined);
     throw error;
@@ -174,16 +147,19 @@ async function drainLLMStream(
   queue: AsyncQueue<string>,
   writer: ReturnType<typeof createSSEWriter>,
   ttsIterator: AsyncIterator<Uint8Array>,
-): Promise<UsageEvent> {
+): Promise<LLMDrainResult> {
+  let fullText = "";
+
   try {
     for await (const delta of llmStream) {
+      fullText += delta;
       await writer.write("text", { delta });
       queue.push(delta);
     }
 
     queue.close();
     const result = await llmStream.done;
-    return result.usage;
+    return { usage: result.usage, fullText };
   } catch (error) {
     queue.close();
     await ttsIterator.return?.();
@@ -284,49 +260,79 @@ class AsyncQueue<T> implements AsyncIterable<T> {
   }
 }
 
+async function persistSessionTurnPair(
+  db: AppDatabase,
+  input: {
+    sessionId: string;
+    userContent: string;
+    assistantContent: string;
+  },
+): Promise<void> {
+  if (input.assistantContent.trim().length === 0) {
+    return;
+  }
+
+  await db.transaction(async (tx) => {
+    const [row] = await tx
+      .select({
+        maxTurnIdx: sql<number | null>`max(${schema.sessionTurns.turnIdx})`,
+      })
+      .from(schema.sessionTurns)
+      .where(eq(schema.sessionTurns.sessionId, input.sessionId));
+    const baseTurnIdx = (row?.maxTurnIdx ?? -1) + 1;
+
+    await tx.insert(schema.sessionTurns).values([
+      {
+        sessionId: input.sessionId,
+        turnIdx: baseTurnIdx,
+        role: "user",
+        content: input.userContent,
+      },
+      {
+        sessionId: input.sessionId,
+        turnIdx: baseTurnIdx + 1,
+        role: "assistant",
+        content: input.assistantContent,
+      },
+    ]);
+  });
+}
+
+function scheduleConsolidation(
+  c: { executionCtx?: ExecutionContext },
+  worker: ConsolidationWorker,
+  sessionId: string,
+): void {
+  const processPromise = worker.processSession(sessionId);
+
+  // Hono's c.executionCtx is a getter that throws when no Worker runtime is
+  // bound (PGlite tests, plain local invocation), so we can't probe with
+  // optional chaining or `!== undefined` — both still trigger the getter.
+  let executionCtx: ExecutionContext | undefined;
+  try {
+    executionCtx = c.executionCtx;
+  } catch {
+    executionCtx = undefined;
+  }
+
+  if (executionCtx !== undefined) {
+    executionCtx.waitUntil(processPromise);
+    return;
+  }
+
+  void processPromise.catch((error: unknown) => {
+    console.error("background consolidation failed", error);
+  });
+}
+
 export function createSessionsRouter(
   db: AppDatabase,
   llm: LLMClient,
   trueLineStore: TrueLineStore,
   createTTS: TTSStreamerFactory,
+  worker: ConsolidationWorker,
 ): Hono<{ Bindings: Env }> {
   const router = new Hono<{ Bindings: Env }>();
-
-  router.post("/projects/:projectId/sessions", async (c) => {
-    const projectId = c.req.param("projectId");
-    const [project] = await db
-      .select({ id: schema.projects.id })
-      .from(schema.projects)
-      .where(eq(schema.projects.id, projectId))
-      .limit(1);
-
-    if (project === undefined) {
-      return c.json({ error: "project not found" }, 404);
-    }
-
-    const body = await c.req.json().catch((): null => null);
-    const validation = validateCreateSessionBody(body);
-
-    if (typeof validation === "string") {
-      return c.json({ error: validation }, 400);
-    }
-
-    const [created] = await db
-      .insert(schema.sessions)
-      .values({
-        projectId,
-        targetArticleId: validation.targetArticleId ?? null,
-        startAt: new Date(),
-        consolidationStatus: "pending",
-      })
-      .returning();
-
-    if (created === undefined) {
-      return c.json({ error: "failed to create session" }, 500);
-    }
-
-    return c.json(serializeSession(created), 201);
-  });
 
   router.post("/sessions/:sessionId/turn", async (c) => {
     const sessionId = c.req.param("sessionId");
@@ -363,7 +369,16 @@ export function createSessionsRouter(
 
       if (!tts) {
         try {
-          const llmUsage = await drainLLMText(llm, llmOptions, writer);
+          const { usage: llmUsage, fullText } = await drainLLMText(
+            llm,
+            llmOptions,
+            writer,
+          );
+          await persistSessionTurnPair(db, {
+            sessionId,
+            userContent: validation.message,
+            assistantContent: fullText,
+          });
           await writer.write("usage", { llm: llmUsage, tts: null });
           await writer.write("done", {});
         } catch (error) {
@@ -386,8 +401,9 @@ export function createSessionsRouter(
       const audioTask = drainTTSStream(ttsIterator, ttsStream.done, writer);
 
       let llmUsage: UsageEvent;
+      let fullText: string;
       try {
-        llmUsage = await textTask;
+        ({ usage: llmUsage, fullText } = await textTask);
       } catch (error) {
         void ttsStream.done.catch(() => undefined);
         void audioTask.catch(() => undefined);
@@ -397,6 +413,11 @@ export function createSessionsRouter(
       }
 
       const ttsUsage = await audioTask;
+      await persistSessionTurnPair(db, {
+        sessionId,
+        userContent: validation.message,
+        assistantContent: fullText,
+      });
       const usage: TurnUsageEvent = { llm: llmUsage, tts: ttsUsage };
       await writer.write("usage", usage);
       await writer.write("done", {});
@@ -419,25 +440,7 @@ export function createSessionsRouter(
       return c.json({ error: "session already ended" }, 409);
     }
 
-    // Hardcoded delta: real LLM-driven consolidation lands in #9. This slice
-    // exercises the spine plumbing — TrueLine is read on the next turn's
-    // system prompt, so the round-trip is verifiable end-to-end.
-    //
-    // Write the delta BEFORE marking endAt: if applyDelta fails (e.g. transient
-    // postgres-js error), the session stays open and /end is retryable. The
-    // alternative (endAt-first) would leave the session half-ended on a failed
-    // applyDelta, since the 409 guard then blocks any retry.
     const endedAt = new Date();
-    const current = await trueLineStore.read(session.projectId);
-    const newContent = appendHardcodedDelta(current.content, sessionId, endedAt);
-
-    await trueLineStore.applyDelta({
-      projectId: session.projectId,
-      sourceSessionId: sessionId,
-      newContent,
-      contributionSummary: `Session ${sessionId} ended (hardcoded)`,
-    });
-
     const [updated] = await db
       .update(schema.sessions)
       .set({ endAt: endedAt })
@@ -448,7 +451,59 @@ export function createSessionsRouter(
       return c.json({ error: "session already ended" }, 409);
     }
 
-    return c.json(serializeSession(updated));
+    const consolidation = await worker.enqueue(sessionId, "session-end");
+    scheduleConsolidation(
+      c as { executionCtx?: ExecutionContext },
+      worker,
+      sessionId,
+    );
+
+    const response: EndSessionResponse = {
+      ...serializeSession(updated),
+      consolidation,
+    };
+    return c.json(response);
+  });
+
+  router.get("/sessions/:sessionId/consolidation", async (c) => {
+    const sessionId = c.req.param("sessionId");
+    const [session] = await db
+      .select({ id: schema.sessions.id })
+      .from(schema.sessions)
+      .where(eq(schema.sessions.id, sessionId))
+      .limit(1);
+
+    if (session === undefined) {
+      return c.json({ error: "session not found" }, 404);
+    }
+
+    return c.json({ consolidation: await worker.getStatus(sessionId) });
+  });
+
+  router.post("/sessions/:sessionId/consolidation/retry", async (c) => {
+    const sessionId = c.req.param("sessionId");
+    const [session] = await db
+      .select({ id: schema.sessions.id })
+      .from(schema.sessions)
+      .where(eq(schema.sessions.id, sessionId))
+      .limit(1);
+
+    if (session === undefined) {
+      return c.json({ error: "session not found" }, 404);
+    }
+
+    const before = await worker.getStatus(sessionId);
+    const consolidation = await worker.retry(sessionId);
+
+    if (before.state === "failed" && consolidation.state === "queued") {
+      scheduleConsolidation(
+        c as { executionCtx?: ExecutionContext },
+        worker,
+        sessionId,
+      );
+    }
+
+    return c.json({ consolidation });
   });
 
   return router;

@@ -6,6 +6,8 @@ export type {
   NewSession,
   TrueLineVersionRow,
   NewTrueLineVersionRow,
+  SessionTurnRow,
+  NewSessionTurnRow,
 } from "./schema.js";
 export {
   createNodeClient,
