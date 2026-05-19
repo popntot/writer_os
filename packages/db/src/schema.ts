@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   check,
+  boolean,
   customType,
   index,
   integer,
@@ -280,6 +281,51 @@ export const embeddings = pgTable("embeddings", {
     .defaultNow(),
 });
 
+/**
+ * Settings — single-tenant app preferences. The fixed primary key keeps this
+ * as exactly one logical document while leaving future columns hidden behind a
+ * small store helper.
+ */
+export const settings = pgTable(
+  "settings",
+  {
+    id: text("id").primaryKey(),
+    audioCaptureDefault: boolean("audio_capture_default")
+      .notNull()
+      .default(false),
+    audioRetentionHotDays: integer("audio_retention_hot_days")
+      .notNull()
+      .default(30),
+    audioRetentionColdDays: integer("audio_retention_cold_days")
+      .notNull()
+      .default(365),
+    locationTagDefault: boolean("location_tag_default")
+      .notNull()
+      .default(false),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    singletonCheck: check(
+      "settings_singleton_id_check",
+      sql`${table.id} = 'singleton'`,
+    ),
+    audioRetentionHotDaysNonnegative: check(
+      "settings_audio_retention_hot_days_nonnegative",
+      sql`${table.audioRetentionHotDays} >= 0`,
+    ),
+    audioRetentionColdDaysNonnegative: check(
+      "settings_audio_retention_cold_days_nonnegative",
+      sql`${table.audioRetentionColdDays} >= 0`,
+    ),
+    audioRetentionOrder: check(
+      "settings_audio_retention_order_check",
+      sql`${table.audioRetentionHotDays} <= ${table.audioRetentionColdDays}`,
+    ),
+  }),
+);
+
 export type Project = typeof projects.$inferSelect;
 export type NewProject = typeof projects.$inferInsert;
 export type Session = typeof sessions.$inferSelect;
@@ -294,3 +340,5 @@ export type InboxItemRow = typeof inboxItems.$inferSelect;
 export type NewInboxItemRow = typeof inboxItems.$inferInsert;
 export type EmbeddingRow = typeof embeddings.$inferSelect;
 export type NewEmbeddingRow = typeof embeddings.$inferInsert;
+export type Settings = typeof settings.$inferSelect;
+export type NewSettings = typeof settings.$inferInsert;
