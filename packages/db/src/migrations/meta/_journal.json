@@ -36,6 +36,13 @@
       "when": 1778285743323,
       "tag": "0004_flippant_blacklash",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1779200000000,
+      "tag": "0005_inbox_foundation",
+      "breakpoints": true
     }
   ]
 }
