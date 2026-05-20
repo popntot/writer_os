@@ -14,6 +14,18 @@ state treatments, or navigation controls.
 
 This interface locks the foundation only. It does not reskin existing screens.
 
+## Cross-Language Naming
+
+Token names are defined here in compact form (`ink2`, `pageMuted`, `hairline2`). Implementations use language-idiomatic casing:
+
+| Surface | Form | Example |
+|---|---|---|
+| This spec | compact / camelCase | `pageMuted` |
+| Swift (`apps/ios/WriterOS/DesignSystem/`) | identical to spec | `Tokens.pageMuted` |
+| CSS (`apps/web/css/tokens.css`) | kebab-case | `--page-muted` |
+
+Names are **semantically identical** across surfaces — the divergence is purely casing convention. When adding a token, extend this table and both implementations in a paired PR.
+
 ## Color Tokens
 
 Color is semantic. Use it sparingly and only to clarify state.
