@@ -93,9 +93,9 @@ Single-context. `CONTEXT.md` and `docs/adr/` at repo root, both created lazily. 
 - Line endings: LF only (enforced via `.gitattributes`). Cross-machine consistency.
 - Indentation: 2 spaces (4 for Swift), tabs in Makefile only. Enforced via `.editorconfig`.
 
-### UI / branding standing instruction
+### UI / styling
 
-Until Will explicitly signals a "design phase," do not propose styling, branding, color palettes, custom typography, or look-and-feel polish. The PRD's UI principles (system fonts, neutral baseline, SwiftUI defaults) are the locked starting point — not a basis for further visual design work. Build the simplest functional UI that exercises the slice's backend; design layers in post-validation.
+Visual style is locked to [`docs/interfaces/design-system.md`](docs/interfaces/design-system.md). All screens compose primitives from `apps/ios/WriterOS/DesignSystem/` and pass the §13 acceptance checklist before merge. Do not introduce ad-hoc colors, fonts, or spacing — extend the design system doc + primitives instead, in a paired PR.
 
 ### Deep modules
 
