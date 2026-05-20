@@ -1,0 +1,1178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Writer OS - Minimal Editorial Prototype</title>
+<style>
+  :root {
+    color-scheme: light;
+    --ground: #fbfaf6;
+    --page: #fffffb;
+    --page-muted: #f4f1e8;
+    --ink: #171512;
+    --ink-2: #49443b;
+    --ink-3: #858072;
+    --hairline: #d9d3c5;
+    --hairline-2: #ece7db;
+    --active: #7d3b25;
+    --ready: #50684e;
+    --source: #3c6672;
+    --open: #9a741c;
+    --shadow: rgba(42, 34, 22, 0.08);
+    --serif: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+    --mono: "SF Mono", "IBM Plex Mono", "JetBrains Mono", Menlo, monospace;
+  }
+
+  :root[data-tone="night"] {
+    color-scheme: dark;
+    --ground: #11110f;
+    --page: #191916;
+    --page-muted: #202018;
+    --ink: #f3ecdc;
+    --ink-2: #cfc4ac;
+    --ink-3: #8f856f;
+    --hairline: #454131;
+    --hairline-2: #2d2b22;
+    --active: #cc8063;
+    --ready: #aab894;
+    --source: #9bbbc2;
+    --open: #d0ab4a;
+    --shadow: rgba(0, 0, 0, 0.24);
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html,
+  body {
+    min-height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--serif);
+    line-height: 1.45;
+  }
+
+  button {
+    color: inherit;
+    font: inherit;
+  }
+
+  .stage {
+    min-height: 100vh;
+    display: grid;
+    grid-template-columns: minmax(340px, 430px) minmax(360px, 1fr);
+    gap: 52px;
+    width: min(1180px, 100%);
+    margin: 0 auto;
+    padding: 28px 22px 46px;
+  }
+
+  .device {
+    position: sticky;
+    top: 26px;
+    width: min(100%, 414px);
+    min-height: 844px;
+    border: 1px solid var(--hairline);
+    border-radius: 34px;
+    padding: 10px;
+    background: #0f0f0d;
+    box-shadow: 0 30px 90px var(--shadow);
+  }
+
+  .screen {
+    position: relative;
+    min-height: 822px;
+    overflow: hidden;
+    border-radius: 25px;
+    background: var(--page);
+  }
+
+  .screen::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      linear-gradient(90deg, transparent 0, transparent 53px, var(--hairline-2) 54px, transparent 55px),
+      linear-gradient(180deg, rgba(255,255,255,0.35), transparent 22%);
+  }
+
+  .chrome {
+    position: relative;
+    z-index: 2;
+    height: 42px;
+    padding: 14px 22px 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    color: var(--ink-3);
+    font: 700 10px/1 var(--mono);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .tone-toggle {
+    border: 0;
+    background: none;
+    color: var(--ink-3);
+    cursor: pointer;
+    font: 700 10px/1 var(--mono);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .views {
+    position: absolute;
+    inset: 42px 0 72px;
+    z-index: 1;
+  }
+
+  .view {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    padding: 20px 26px 26px 70px;
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 220ms ease, transform 260ms ease;
+    pointer-events: none;
+  }
+
+  .view.active {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+
+  .scroll {
+    height: 100%;
+    overflow: auto;
+    padding-right: 3px;
+    scrollbar-width: none;
+  }
+
+  .scroll::-webkit-scrollbar {
+    width: 0;
+  }
+
+  .page-mark {
+    position: absolute;
+    top: 72px;
+    left: 19px;
+    color: var(--ink-3);
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    font: 700 9px/1 var(--mono);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+
+  .measure {
+    max-width: 290px;
+  }
+
+  .label,
+  .state,
+  .nav-button,
+  .meta,
+  .index-label,
+  .focus-button,
+  .spec-key {
+    font-family: var(--mono);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .label {
+    margin: 0 0 18px;
+    color: var(--ink-3);
+    font-size: 10px;
+    font-weight: 700;
+  }
+
+  h1,
+  h2,
+  h3,
+  p {
+    margin-top: 0;
+  }
+
+  h1 {
+    margin-bottom: 18px;
+    font-size: 48px;
+    line-height: 0.92;
+    font-weight: 500;
+    letter-spacing: 0;
+  }
+
+  h2 {
+    margin-bottom: 11px;
+    font-size: 28px;
+    line-height: 1.03;
+    font-weight: 500;
+    letter-spacing: 0;
+  }
+
+  h3 {
+    margin-bottom: 5px;
+    font-size: 19px;
+    line-height: 1.12;
+    font-weight: 500;
+    letter-spacing: 0;
+  }
+
+  p {
+    color: var(--ink-2);
+    font-size: 16px;
+  }
+
+  .date-lockup {
+    margin: 0 0 38px;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 15px;
+    align-items: baseline;
+    border-bottom: 1px solid var(--hairline);
+    padding-bottom: 18px;
+  }
+
+  .date-lockup .day {
+    color: var(--ink);
+    font-size: 56px;
+    line-height: 0.8;
+  }
+
+  .date-lockup .meta {
+    color: var(--ink-3);
+    font-size: 10px;
+    line-height: 1.55;
+  }
+
+  .primary-question {
+    margin: 32px 0 34px;
+    padding: 26px 0 28px;
+    border-top: 1px solid var(--ink);
+    border-bottom: 1px solid var(--ink);
+  }
+
+  .primary-question p {
+    margin: 0;
+    color: var(--ink);
+    font-size: 26px;
+    line-height: 1.17;
+  }
+
+  .focus-switch {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    margin: -20px 0 30px;
+    border-top: 1px solid var(--hairline);
+    border-bottom: 1px solid var(--hairline);
+  }
+
+  .focus-button {
+    min-height: 42px;
+    border: 0;
+    border-right: 1px solid var(--hairline);
+    background: transparent;
+    color: var(--ink-3);
+    cursor: pointer;
+    font-size: 9px;
+    font-weight: 800;
+  }
+
+  .focus-button:last-child {
+    border-right: 0;
+  }
+
+  .focus-button.active {
+    color: var(--ink);
+    background: var(--page-muted);
+  }
+
+  .today-mode {
+    display: block;
+  }
+
+  .today-mode.hidden {
+    display: none;
+  }
+
+  .work-index {
+    margin: 28px 0 0;
+    border-top: 1px solid var(--ink);
+  }
+
+  .index-row {
+    display: grid;
+    grid-template-columns: 38px 1fr auto;
+    gap: 12px;
+    align-items: baseline;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--hairline);
+  }
+
+  .index-row p {
+    margin: 0;
+    font-size: 14.5px;
+  }
+
+  .index-row .number,
+  .index-row .mark {
+    color: var(--ink-3);
+    font: 800 10px/1 var(--mono);
+    letter-spacing: 0.1em;
+  }
+
+  .index-row.active .mark {
+    color: var(--active);
+  }
+
+  .index-row.open .mark {
+    color: var(--open);
+  }
+
+  .index-row.source .mark {
+    color: var(--source);
+  }
+
+  .quiet-list {
+    display: grid;
+    gap: 0;
+    margin-top: 18px;
+    border-top: 1px solid var(--hairline);
+  }
+
+  .quiet-row {
+    position: relative;
+    padding: 15px 0 15px;
+    border-bottom: 1px solid var(--hairline);
+  }
+
+  .quiet-row::before {
+    content: "";
+    position: absolute;
+    left: -17px;
+    top: 18px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--ink-3);
+  }
+
+  .quiet-row.active::before {
+    background: var(--active);
+  }
+
+  .quiet-row.ready::before {
+    background: var(--ready);
+  }
+
+  .quiet-row.source::before {
+    background: var(--source);
+  }
+
+  .quiet-row.open::before {
+    background: var(--open);
+  }
+
+  .quiet-row h3 {
+    padding-right: 46px;
+  }
+
+  .quiet-row p {
+    margin-bottom: 0;
+    font-size: 14.5px;
+  }
+
+  .state {
+    display: inline-block;
+    margin-bottom: 10px;
+    color: var(--ink-3);
+    font-size: 9px;
+    font-weight: 800;
+  }
+
+  .state.active {
+    color: var(--active);
+  }
+
+  .state.ready {
+    color: var(--ready);
+  }
+
+  .state.source {
+    color: var(--source);
+  }
+
+  .state.open {
+    color: var(--open);
+  }
+
+  .document-weather {
+    margin: 28px 0 0;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    border: 1px solid var(--hairline);
+    border-left: 0;
+    border-right: 0;
+  }
+
+  .weather-cell {
+    min-height: 58px;
+    padding: 10px 6px;
+    border-right: 1px solid var(--hairline);
+  }
+
+  .weather-cell:last-child {
+    border-right: 0;
+  }
+
+  .weather-cell span {
+    display: block;
+    margin-bottom: 6px;
+    font: 800 9px/1 var(--mono);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .weather-cell p {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.2;
+  }
+
+  .weather-active span {
+    color: var(--active);
+  }
+
+  .weather-ready span {
+    color: var(--ready);
+  }
+
+  .weather-source span {
+    color: var(--source);
+  }
+
+  .weather-open span {
+    color: var(--open);
+  }
+
+  .walk-sheet {
+    min-height: 520px;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+  }
+
+  .timer {
+    margin: 6px 0 34px;
+    font-size: 68px;
+    line-height: 0.85;
+    font-weight: 400;
+  }
+
+  .captured-thought {
+    align-self: center;
+    border-left: 1px solid var(--hairline);
+    padding-left: 20px;
+  }
+
+  .captured-thought p {
+    color: var(--ink);
+    font-size: 31px;
+    line-height: 1.13;
+  }
+
+  .control-line {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 18px;
+    align-items: center;
+    color: var(--ink-3);
+    font: 800 10px/1 var(--mono);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .control-line::before,
+  .control-line::after {
+    content: "";
+    height: 1px;
+    background: var(--hairline);
+  }
+
+  .close-stack {
+    margin-top: 30px;
+    border-top: 1px solid var(--ink);
+  }
+
+  .filed-note {
+    padding: 20px 0 21px;
+    border-bottom: 1px solid var(--hairline);
+  }
+
+  .filed-note p {
+    margin: 0;
+  }
+
+  .article-lede {
+    margin: 22px 0 32px;
+    color: var(--ink);
+    font-size: 22px;
+    line-height: 1.27;
+  }
+
+  .beat-list {
+    counter-reset: beat;
+    border-top: 1px solid var(--hairline);
+  }
+
+  .beat {
+    counter-increment: beat;
+    display: grid;
+    grid-template-columns: 34px 1fr;
+    gap: 12px;
+    padding: 18px 0;
+    border-bottom: 1px solid var(--hairline);
+  }
+
+  .beat::before {
+    content: counter(beat, decimal-leading-zero);
+    color: var(--ink-3);
+    font: 800 10px/1.4 var(--mono);
+    letter-spacing: 0.1em;
+  }
+
+  .beat p {
+    margin: 0;
+  }
+
+  .source-note {
+    padding: 19px 0;
+    border-top: 1px solid var(--hairline);
+  }
+
+  .source-note:first-of-type {
+    border-top-color: var(--ink);
+  }
+
+  .source-note blockquote {
+    margin: 0;
+    color: var(--ink);
+    font-size: 21px;
+    line-height: 1.24;
+  }
+
+  .source-note p {
+    margin: 9px 0 0;
+    font-size: 13.5px;
+  }
+
+  .system-note {
+    margin-top: 26px;
+    border-top: 1px solid var(--ink);
+  }
+
+  .spec-row {
+    display: grid;
+    grid-template-columns: 84px 1fr;
+    gap: 16px;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--hairline);
+  }
+
+  .spec-key {
+    color: var(--ink-3);
+    font-size: 9px;
+    font-weight: 800;
+  }
+
+  .spec-row p {
+    margin: 0;
+    font-size: 14.5px;
+  }
+
+  .type-ladder {
+    margin-top: 26px;
+    border-top: 1px solid var(--hairline);
+  }
+
+  .type-line {
+    padding: 15px 0;
+    border-bottom: 1px solid var(--hairline);
+  }
+
+  .type-line.large {
+    color: var(--ink);
+    font-size: 34px;
+    line-height: 1;
+  }
+
+  .type-line.body {
+    color: var(--ink-2);
+    font-size: 16px;
+  }
+
+  .type-line.meta {
+    color: var(--ink-3);
+    font: 800 10px/1.4 var(--mono);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .nav {
+    position: absolute;
+    z-index: 3;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    height: 72px;
+    border-top: 1px solid var(--hairline);
+    background: color-mix(in srgb, var(--page) 92%, transparent);
+    backdrop-filter: blur(14px);
+  }
+
+  .nav-button {
+    border: 0;
+    border-right: 1px solid var(--hairline-2);
+    background: none;
+    color: var(--ink-3);
+    cursor: pointer;
+    font-size: 9px;
+    font-weight: 800;
+  }
+
+  .nav-button:last-child {
+    border-right: 0;
+  }
+
+  .nav-button.active {
+    color: var(--ink);
+    background: var(--page-muted);
+  }
+
+  .board {
+    padding-top: 18px;
+  }
+
+  .board h2 {
+    max-width: 690px;
+    margin-bottom: 18px;
+    font-size: clamp(44px, 6vw, 86px);
+    line-height: 0.89;
+    font-weight: 500;
+  }
+
+  .board > p {
+    max-width: 560px;
+    color: var(--ink-2);
+    font-size: 19px;
+  }
+
+  .principles {
+    margin-top: 44px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    border-top: 1px solid var(--ink);
+  }
+
+  .principle {
+    min-height: 190px;
+    padding: 22px 24px 26px 0;
+    border-bottom: 1px solid var(--hairline);
+  }
+
+  .principle:nth-child(odd) {
+    border-right: 1px solid var(--hairline);
+  }
+
+  .principle:nth-child(even) {
+    padding-left: 24px;
+  }
+
+  .index-label {
+    display: block;
+    margin-bottom: 18px;
+    color: var(--ink-3);
+    font-size: 10px;
+    font-weight: 800;
+  }
+
+  .principle h3 {
+    font-size: 30px;
+    line-height: 1;
+  }
+
+  .principle p {
+    max-width: 300px;
+  }
+
+  .palette-line {
+    margin-top: 38px;
+    display: grid;
+    grid-template-columns: 2fr repeat(4, 1fr);
+    height: 52px;
+    border-top: 1px solid var(--hairline);
+    border-bottom: 1px solid var(--hairline);
+  }
+
+  .tone {
+    border-right: 1px solid var(--hairline);
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    font: 800 9px/1 var(--mono);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .tone:nth-child(1) {
+    background: var(--page);
+    color: var(--ink);
+  }
+
+  .tone:nth-child(2) {
+    background: var(--active);
+    color: #fffaf5;
+  }
+
+  .tone:nth-child(3) {
+    background: var(--ready);
+    color: #fffaf5;
+  }
+
+  .tone:nth-child(4) {
+    background: var(--source);
+    color: #fffaf5;
+  }
+
+  .tone:nth-child(5) {
+    background: var(--open);
+    color: #fffaf5;
+    border-right: 0;
+  }
+
+  @media (max-width: 930px) {
+    .stage {
+      display: block;
+      padding: 0;
+    }
+
+    .device {
+      position: relative;
+      top: auto;
+      width: 100%;
+      min-height: 100vh;
+      border: 0;
+      border-radius: 0;
+      padding: 0;
+      box-shadow: none;
+      background: var(--page);
+    }
+
+    .screen {
+      min-height: 100vh;
+      border-radius: 0;
+    }
+
+    .board {
+      padding: 42px 24px 56px;
+    }
+  }
+
+  @media (max-width: 460px) {
+    .view {
+      padding-left: 64px;
+      padding-right: 22px;
+    }
+
+    h1 {
+      font-size: 43px;
+    }
+
+    .primary-question p,
+    .captured-thought p {
+      font-size: 25px;
+    }
+
+    .principles {
+      grid-template-columns: 1fr;
+    }
+
+    .principle,
+    .principle:nth-child(even) {
+      border-right: 0;
+      padding-left: 0;
+    }
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <section class="device" aria-label="Minimal Writer OS mobile prototype">
+    <div class="screen">
+      <div class="chrome">
+        <span>Writer OS</span>
+        <button class="tone-toggle" type="button">Night</button>
+      </div>
+
+      <div class="page-mark" id="page-mark">Today / Walk 3</div>
+
+      <div class="views">
+        <section class="view active" id="today">
+          <div class="scroll">
+            <div class="measure">
+              <p class="label">Today</p>
+              <div class="date-lockup">
+                <span class="day">18</span>
+                <span class="meta">May<br>Walk-ready<br>08:40</span>
+              </div>
+
+              <div class="focus-switch" aria-label="Today mode">
+                <button class="focus-button active" type="button" data-mode="walk">Walk</button>
+                <button class="focus-button" type="button" data-mode="desk">Desk</button>
+              </div>
+
+              <div class="today-mode" data-panel="walk">
+                <h1>After Abundance</h1>
+                <p>One active question. Three quiet signals. Nothing else has the right to interrupt the walk.</p>
+
+                <div class="primary-question">
+                  <p>If money no longer assigns dignity, what does effort feel like on a Tuesday?</p>
+                </div>
+
+                <div class="quiet-list">
+                  <article class="quiet-row active">
+                    <span class="state active">Active</span>
+                    <h3>Article 1 needs a cold read</h3>
+                    <p>The opener is not ready for revision until it has been read slowly.</p>
+                  </article>
+                  <article class="quiet-row open">
+                    <span class="state open">Open</span>
+                    <h3>Work after coercion</h3>
+                    <p>Stay with the felt life before reaching for architecture.</p>
+                  </article>
+                  <article class="quiet-row ready">
+                    <span class="state ready">Ready</span>
+                    <h3>No scoreboard</h3>
+                    <p>The ledger answer has been retired as the default frame.</p>
+                  </article>
+                </div>
+              </div>
+
+              <div class="today-mode hidden" data-panel="desk">
+                <h1>Desk page</h1>
+                <p>The desk surface is still minimal, but it can hold a little more structure because the work is slower.</p>
+
+                <div class="work-index">
+                  <div class="index-row active">
+                    <span class="number">01</span>
+                    <p>Read Article 1 draft 2 without editing it.</p>
+                    <span class="mark">Active</span>
+                  </div>
+                  <div class="index-row source">
+                    <span class="number">02</span>
+                    <p>Review lineage candidates for Article 0.</p>
+                    <span class="mark">Source</span>
+                  </div>
+                  <div class="index-row open">
+                    <span class="number">03</span>
+                    <p>Desk-test "starter packs, not manifesto."</p>
+                    <span class="mark">Open</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="walk">
+          <div class="scroll">
+            <div class="measure walk-sheet">
+              <div>
+                <p class="label">Walk</p>
+                <div class="timer">27:14</div>
+              </div>
+
+              <div class="captured-thought">
+                <span class="state active">Marked thought</span>
+                <p>Work might be where belonging becomes visible, provided visibility does not become a score.</p>
+              </div>
+
+              <div class="control-line"><span>Capture</span></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="close">
+          <div class="scroll">
+            <div class="measure">
+              <p class="label">Close</p>
+              <h1>Filed, not finished</h1>
+              <p>The close state is intentionally plain. It gives the walk shape without pretending the question is solved.</p>
+
+              <div class="close-stack">
+                <article class="filed-note">
+                  <span class="state active">Captured</span>
+                  <h3>Belonging without a ledger</h3>
+                  <p>Return to wildfire clearing and elder visits as the Tuesday cases.</p>
+                </article>
+                <article class="filed-note">
+                  <span class="state open">Question</span>
+                  <h3>Visible contribution</h3>
+                  <p>How does a community notice work without ranking people?</p>
+                </article>
+                <article class="filed-note">
+                  <span class="state ready">Next</span>
+                  <h3>Desk read Article 1</h3>
+                  <p>Do not draft Article 6 until the opener has been read cold.</p>
+                </article>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="article">
+          <div class="scroll">
+            <div class="measure">
+              <p class="label">Article</p>
+              <h1>Article 0</h1>
+              <p class="article-lede">A short preamble about lineage, process honesty, and the terms on which the reader is being invited in.</p>
+
+              <div class="document-weather">
+                <div class="weather-cell weather-active">
+                  <span>Draft</span>
+                  <p>Not yet</p>
+                </div>
+                <div class="weather-cell weather-ready">
+                  <span>Voice</span>
+                  <p>Letter</p>
+                </div>
+                <div class="weather-cell weather-source">
+                  <span>Lineage</span>
+                  <p>Warm</p>
+                </div>
+                <div class="weather-cell weather-open">
+                  <span>Risk</span>
+                  <p>Overclaim</p>
+                </div>
+              </div>
+
+              <div class="beat-list">
+                <div class="beat">
+                  <p><strong>Calibration.</strong> Letter-tempo, plain prose, no manifesto posture.</p>
+                </div>
+                <div class="beat">
+                  <p><strong>Lineage.</strong> Name only the thinkers actually engaged with.</p>
+                </div>
+                <div class="beat">
+                  <p><strong>Disclosure.</strong> Plain, forward, unburied, with no apology.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="source">
+          <div class="scroll">
+            <div class="measure">
+              <p class="label">Source</p>
+              <h1>Source as margin</h1>
+              <p>Raw material appears as a sequence of quiet excerpts. The interface does not turn it into an inbox.</p>
+
+              <article class="source-note">
+                <span class="state source">SRC 01</span>
+                <blockquote>Starter packs, not manifesto.</blockquote>
+                <p>Promising, late-walk, still needs desk testing.</p>
+              </article>
+              <article class="source-note">
+                <span class="state source">SRC 02</span>
+                <blockquote>Hopkins-as-host is practice, not theory.</blockquote>
+                <p>Useful for Article 0 if it survives a cold read.</p>
+              </article>
+              <article class="source-note">
+                <span class="state open">SRC 03</span>
+                <blockquote>No scoreboard closes off the easy answer.</blockquote>
+                <p>This pressures the preference-layer question.</p>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="system">
+          <div class="scroll">
+            <div class="measure">
+              <p class="label">System</p>
+              <h1>Rules of restraint</h1>
+              <p>This direction gets its personality from what it refuses: no cards, no assistant mascot, no heavy chrome.</p>
+
+              <div class="system-note">
+                <div class="spec-row">
+                  <span class="spec-key">Surface</span>
+                  <p>Pages, rules, rows, and measured excerpts.</p>
+                </div>
+                <div class="spec-row">
+                  <span class="spec-key">State</span>
+                  <p>Dots, thin labels, rule weight, and small shifts in tone.</p>
+                </div>
+                <div class="spec-row">
+                  <span class="spec-key">Motion</span>
+                  <p>A page settles. Nothing performs.</p>
+                </div>
+                <div class="spec-row">
+                  <span class="spec-key">AI</span>
+                  <p>Never personified. Intelligence appears as prioritization.</p>
+                </div>
+              </div>
+
+              <div class="type-ladder">
+                <div class="type-line large">A composed page, not a dashboard.</div>
+                <div class="type-line body">Body copy carries the project. Controls stay subordinate to reading.</div>
+                <div class="type-line meta">Metadata / 10px mono / wide track</div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <nav class="nav" aria-label="Minimal navigation">
+        <button class="nav-button active" type="button" data-view="today">Today</button>
+        <button class="nav-button" type="button" data-view="walk">Walk</button>
+        <button class="nav-button" type="button" data-view="close">Close</button>
+        <button class="nav-button" type="button" data-view="article">Article</button>
+        <button class="nav-button" type="button" data-view="source">Source</button>
+        <button class="nav-button" type="button" data-view="system">System</button>
+      </nav>
+    </div>
+  </section>
+
+  <aside class="board" aria-label="Minimal design system board">
+    <p class="label">Alternate direction</p>
+    <h2>Severe, quiet, almost invisible.</h2>
+    <p>This is now the active direction: the same Writer OS substance, stripped of most notebook-object cues. The design system becomes editorial minimalism: hairlines, measured typography, sparse state dots, and document weather instead of decorative flags.</p>
+
+    <div class="palette-line" aria-label="Signal palette">
+      <div class="tone">Ground</div>
+      <div class="tone">Active</div>
+      <div class="tone">Ready</div>
+      <div class="tone">Source</div>
+      <div class="tone">Open</div>
+    </div>
+
+    <div class="principles">
+      <section class="principle">
+        <span class="index-label">01</span>
+        <h3>Reading first</h3>
+        <p>The primary UI unit is a composed page, not a card, pane, or chat message.</p>
+      </section>
+      <section class="principle">
+        <span class="index-label">02</span>
+        <h3>State by pressure</h3>
+        <p>Status appears through dots, rule weight, and tone shifts. Color is rare and specific.</p>
+      </section>
+      <section class="principle">
+        <span class="index-label">03</span>
+        <h3>Invisible organizer</h3>
+        <p>The intelligence is implied by what is surfaced and what is withheld.</p>
+      </section>
+      <section class="principle">
+        <span class="index-label">04</span>
+        <h3>Almost static</h3>
+        <p>Motion is reduced to a page settling into place. No spectacle, no assistant theatre.</p>
+      </section>
+      <section class="principle">
+        <span class="index-label">05</span>
+        <h3>Two modes</h3>
+        <p>Walk mode is a single question. Desk mode can hold a short ordered index.</p>
+      </section>
+      <section class="principle">
+        <span class="index-label">06</span>
+        <h3>No visible AI</h3>
+        <p>The organizer is felt in the edit: what is shown, hidden, sequenced, and named.</p>
+      </section>
+    </div>
+  </aside>
+</main>
+
+<script>
+  const root = document.documentElement;
+  const buttons = Array.from(document.querySelectorAll(".nav-button"));
+  const modeButtons = Array.from(document.querySelectorAll(".focus-button"));
+  const modePanels = Array.from(document.querySelectorAll(".today-mode"));
+  const views = Array.from(document.querySelectorAll(".view"));
+  const marker = document.querySelector("#page-mark");
+  const tone = document.querySelector(".tone-toggle");
+  const labels = {
+    today: "Today / Walk 3",
+    walk: "Walk / Capture",
+    close: "Close / File",
+    article: "Article / Outline",
+    source: "Source / Raw",
+    system: "System / Rules"
+  };
+
+  function activeMode() {
+    return document.querySelector(".focus-button.active")?.dataset.mode || "walk";
+  }
+
+  function hashFor(name) {
+    const mode = name === "today" ? `-${activeMode()}` : "";
+    const night = root.dataset.tone === "night" ? "-night" : "";
+    return `#${name}${mode}${night}`;
+  }
+
+  function show(name, updateHash = true) {
+    buttons.forEach((button) => button.classList.toggle("active", button.dataset.view === name));
+    views.forEach((view) => view.classList.toggle("active", view.id === name));
+    marker.textContent = name === "today" && activeMode() === "desk" ? "Today / Desk" : labels[name] || labels.today;
+    if (updateHash) {
+      history.replaceState(null, "", hashFor(name));
+    }
+  }
+
+  buttons.forEach((button) => {
+    button.addEventListener("click", () => show(button.dataset.view));
+  });
+
+  function setMode(name, updateHash = true) {
+    modeButtons.forEach((button) => button.classList.toggle("active", button.dataset.mode === name));
+    modePanels.forEach((panel) => panel.classList.toggle("hidden", panel.dataset.panel !== name));
+    if (document.querySelector(".nav-button.active")?.dataset.view === "today") {
+      marker.textContent = name === "desk" ? "Today / Desk" : labels.today;
+      if (updateHash) {
+        history.replaceState(null, "", hashFor("today"));
+      }
+    }
+  }
+
+  modeButtons.forEach((button) => {
+    button.addEventListener("click", () => setMode(button.dataset.mode));
+  });
+
+  tone.addEventListener("click", () => {
+    const night = root.dataset.tone !== "night";
+    root.dataset.tone = night ? "night" : "";
+    tone.textContent = night ? "Day" : "Night";
+    const active = document.querySelector(".nav-button.active")?.dataset.view || "today";
+    history.replaceState(null, "", hashFor(active));
+  });
+
+  const hash = location.hash.replace("#", "");
+  const initial = buttons.find((button) => hash.includes(button.dataset.view))?.dataset.view || "today";
+  if (hash.includes("night")) {
+    root.dataset.tone = "night";
+    tone.textContent = "Day";
+  }
+  show(initial, false);
+  setMode(hash.includes("desk") ? "desk" : "walk", false);
+</script>
+</body>
+</html>

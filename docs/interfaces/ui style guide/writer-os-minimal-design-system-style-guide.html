@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Writer OS Minimal Design System Style Guide</title>
+<style>
+:root {
+  --ground:#fbfaf6; --page:#fffffb; --page-muted:#f4f1e8; --ink:#171512; --ink-2:#49443b; --ink-3:#858072; --hairline:#d9d3c5; --hairline-2:#ece7db; --active:#7d3b25; --ready:#50684e; --source:#3c6672; --open:#9a741c;
+  --serif:"Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  --mono:"SF Mono", "IBM Plex Mono", "JetBrains Mono", Menlo, monospace;
+}
+* { box-sizing:border-box; }
+body { margin:0; background:var(--ground); color:var(--ink); font-family:var(--serif); line-height:1.48; }
+main { max-width:920px; margin:0 auto; padding:64px 56px 90px; background:var(--page); border-left:1px solid var(--hairline-2); border-right:1px solid var(--hairline-2); }
+h1 { font-size:54px; line-height:.94; font-weight:500; letter-spacing:0; margin:0 0 18px; max-width:720px; }
+h2 { break-after:avoid; margin:52px 0 14px; padding-top:18px; border-top:1px solid var(--ink); font-size:30px; line-height:1.05; font-weight:500; letter-spacing:0; }
+h3 { break-after:avoid; margin:30px 0 8px; font-size:21px; line-height:1.12; font-weight:500; letter-spacing:0; }
+h4 { margin:22px 0 8px; color:var(--ink-2); font:800 11px/1 var(--mono); letter-spacing:.12em; text-transform:uppercase; }
+p { max-width:700px; margin:0 0 14px; color:var(--ink-2); font-size:16px; }
+ul { margin:0 0 20px 0; padding:0 0 0 20px; max-width:720px; }
+li { margin:0 0 7px; color:var(--ink-2); }
+hr { border:0; border-top:1px solid var(--hairline); margin:28px 0; }
+code { font-family:var(--mono); font-size:.88em; color:var(--active); background:var(--page-muted); padding:1px 4px; border-radius:2px; }
+pre { overflow:auto; margin:18px 0 26px; padding:18px 20px; background:var(--page-muted); border:1px solid var(--hairline); color:var(--ink); font:12px/1.55 var(--mono); white-space:pre-wrap; }
+pre code { background:transparent; color:inherit; padding:0; }
+table { width:100%; border-collapse:collapse; margin:16px 0 28px; font-size:14px; break-inside:avoid; }
+th, td { text-align:left; vertical-align:top; padding:9px 10px; border-bottom:1px solid var(--hairline); color:var(--ink-2); }
+th { color:var(--ink); font:800 10px/1.2 var(--mono); letter-spacing:.1em; text-transform:uppercase; background:var(--page-muted); }
+strong { color:var(--ink); font-weight:600; }
+@page { margin:18mm 16mm; }
+@media print { body { background:white; } main { border:0; padding:0; max-width:none; } h2 { break-before:auto; } pre, table { break-inside:avoid; } }
+</style>
+</head>
+<body><main><h1>Writer OS Minimal Design System Style Guide</h1>
+<p>Version: 0.1 Source prototype: <code>writer-os-ui-minimal.html</code> Primary direction: severe editorial minimalism for a serious writing instrument</p>
+<hr>
+<h2>1. Design Thesis</h2>
+<p>Writer OS should feel like a composed editorial instrument, not a productivity dashboard, AI chat surface, or decorative notebook app.</p>
+<p>The interface should be:</p>
+<ul>
+<li><strong>Severe, quiet, almost invisible.</strong> The design gets its personality through restraint.</li>
+<li><strong>Reading-first.</strong> The primary unit is a composed page of thought, not a card, feed, chat bubble, or widget.</li>
+<li><strong>Editorial, not cozy.</strong> Use literary typography, hairline rules, and measured spacing rather than faux paper, handwriting, or nostalgic texture.</li>
+<li><strong>AI-invisible.</strong> The intelligence is implied by prioritization: what is shown, hidden, sequenced, and named.</li>
+<li><strong>Almost static.</strong> Motion should feel like a page settling, not a product performing.</li>
+</ul>
+<h3>Anti-Patterns</h3>
+<p>Do not make Writer OS feel like:</p>
+<ul>
+<li>AI SaaS: glowing gradients, purple/blue sheen, assistant avatars, chat-first composition.</li>
+<li>A project dashboard: KPIs, widget grids, dense management panels, task-board aesthetics.</li>
+<li>A precious journal: faux handwriting, torn paper, stickers, heavy textures, sentimental notebook cues.</li>
+<li>A generic mobile app: rounded card stacks, pill-heavy controls, overly familiar startup UI.</li>
+</ul>
+<hr>
+<h2>2. Visual Language</h2>
+<h3>Core Metaphor</h3>
+<p>The app is a <strong>quiet editorial page</strong> with a narrow margin system. It should feel closer to a carefully typeset essay draft than a workspace dashboard.</p>
+<h3>Primary Surfaces</h3>
+<p>Use:</p>
+<ul>
+<li>pages</li>
+<li>hairline rules</li>
+<li>measured rows</li>
+<li>excerpts</li>
+<li>small state dots</li>
+<li>document-weather strips</li>
+<li>narrow margin labels</li>
+</ul>
+<p>Avoid:</p>
+<ul>
+<li>stacked cards</li>
+<li>floating panels</li>
+<li>chat bubbles</li>
+<li>heavy controls</li>
+<li>decorative frames</li>
+</ul>
+<h3>Layout Personality</h3>
+<p>The layout should preserve meaningful blank space. Silence is part of the interface.</p>
+<p>Use asymmetry lightly:</p>
+<ul>
+<li>a narrow left margin rail</li>
+<li>vertical page mark</li>
+<li>one dominant content measure</li>
+<li>large type only for true page-level ideas</li>
+</ul>
+<hr>
+<h2>3. Design Tokens</h2>
+<p>These tokens are the current canonical palette from the prototype.</p>
+<pre><code class="language-css">
+:root {
+  --ground: #fbfaf6;
+  --page: #fffffb;
+  --page-muted: #f4f1e8;
+
+  --ink: #171512;
+  --ink-2: #49443b;
+  --ink-3: #858072;
+
+  --hairline: #d9d3c5;
+  --hairline-2: #ece7db;
+
+  --active: #7d3b25;
+  --ready: #50684e;
+  --source: #3c6672;
+  --open: #9a741c;
+
+  --shadow: rgba(42, 34, 22, 0.08);
+
+  --serif: &quot;Iowan Old Style&quot;, &quot;Palatino Linotype&quot;, &quot;Book Antiqua&quot;, Georgia, serif;
+  --mono: &quot;SF Mono&quot;, &quot;IBM Plex Mono&quot;, &quot;JetBrains Mono&quot;, Menlo, monospace;
+}
+</code></pre>
+<h3>Night Mode Tokens</h3>
+<pre><code class="language-css">
+:root[data-tone=&quot;night&quot;] {
+  --ground: #11110f;
+  --page: #191916;
+  --page-muted: #202018;
+
+  --ink: #f3ecdc;
+  --ink-2: #cfc4ac;
+  --ink-3: #8f856f;
+
+  --hairline: #454131;
+  --hairline-2: #2d2b22;
+
+  --active: #cc8063;
+  --ready: #aab894;
+  --source: #9bbbc2;
+  --open: #d0ab4a;
+
+  --shadow: rgba(0, 0, 0, 0.24);
+}
+</code></pre>
+<h3>Color Semantics</h3>
+<p>Use color sparingly. Color should never decorate; it should clarify state.</p>
+<table><tbody>
+<tr><th>Token</th><th>Meaning</th><th>Usage</th></tr>
+<tr><td>`--active`</td><td>Current work / primary focus</td><td>active item dot, active label, urgent but non-alarming state</td></tr>
+<tr><td>`--ready`</td><td>Settled / reviewed / safe to proceed</td><td>completed state, next-ready indicator</td></tr>
+<tr><td>`--source`</td><td>Source / reference material</td><td>citations, excerpts, raw material markers</td></tr>
+<tr><td>`--open`</td><td>Unresolved question / tension</td><td>live question, uncertainty, conceptual pressure</td></tr>
+<tr><td>`--ink-3`</td><td>Quiet metadata</td><td>dates, labels, inactive navigation</td></tr>
+</tbody></table>
+<hr>
+<h2>4. Typography</h2>
+<p>Typography is the main design material.</p>
+<h3>Font Roles</h3>
+<ul>
+<li><strong>Serif:</strong> prose, page titles, prompts, article excerpts.</li>
+<li><strong>Mono:</strong> metadata, navigation, state labels, timestamps, indexes.</li>
+</ul>
+<h3>Type Scale</h3>
+<p>Recommended mobile scale:</p>
+<table><tbody>
+<tr><th>Role</th><th>Size</th><th>Line Height</th><th>Weight</th><th>Notes</th></tr>
+<tr><td>Page title</td><td>43-48px</td><td>0.92</td><td>500</td><td>Use for screen-level concepts only</td></tr>
+<tr><td>Section heading</td><td>28px</td><td>1.03</td><td>500</td><td>Article/source section headings</td></tr>
+<tr><td>Row title</td><td>19px</td><td>1.12</td><td>500</td><td>Quiet list items</td></tr>
+<tr><td>Primary question</td><td>25-26px</td><td>1.17</td><td>400</td><td>One per Today page</td></tr>
+<tr><td>Body</td><td>16px</td><td>1.45</td><td>400</td><td>Main reading text</td></tr>
+<tr><td>Supporting body</td><td>14.5px</td><td>1.35-1.45</td><td>400</td><td>Row descriptions</td></tr>
+<tr><td>Metadata</td><td>9-10px</td><td>1.0-1.55</td><td>700-800</td><td>Mono, uppercase, tracked</td></tr>
+</tbody></table>
+<h3>Typography Rules</h3>
+<ul>
+<li>Do not use negative letter spacing.</li>
+<li>Do not scale font size fluidly with viewport width inside the mobile app surface.</li>
+<li>Keep metadata uppercase and tracked, but short.</li>
+<li>Avoid overusing bold; hierarchy should come from scale, rule weight, and placement.</li>
+<li>Treat large type as expensive. If everything is large, nothing is quiet.</li>
+</ul>
+<hr>
+<h2>5. Spacing And Layout</h2>
+<h3>Mobile Shell</h3>
+<p>The mobile surface uses:</p>
+<ul>
+<li>narrow left rail: <code>54-70px</code></li>
+<li>content measure: approximately <code>290px</code></li>
+<li>bottom navigation: <code>72px</code></li>
+<li>top chrome: <code>42px</code></li>
+</ul>
+<p>Current prototype values:</p>
+<pre><code class="language-css">
+.view {
+  padding: 20px 26px 26px 70px;
+}
+
+.measure {
+  max-width: 290px;
+}
+</code></pre>
+<h3>Spacing Scale</h3>
+<p>Use this practical scale:</p>
+<table><tbody>
+<tr><th>Token</th><th>Value</th><th>Use</th></tr>
+<tr><td>`space-1`</td><td>5px</td><td>tight label/title relationships</td></tr>
+<tr><td>`space-2`</td><td>10px</td><td>metadata group spacing</td></tr>
+<tr><td>`space-3`</td><td>15-16px</td><td>row padding</td></tr>
+<tr><td>`space-4`</td><td>18-20px</td><td>section rhythm</td></tr>
+<tr><td>`space-5`</td><td>26-28px</td><td>primary blocks</td></tr>
+<tr><td>`space-6`</td><td>32-38px</td><td>major screen separation</td></tr>
+<tr><td>`space-7`</td><td>44px+</td><td>desktop board sections</td></tr>
+</tbody></table>
+<h3>Rule Weights</h3>
+<ul>
+<li>Use <code>1px</code> rules almost everywhere.</li>
+<li>Use <code>var(--ink)</code> rule color only for major conceptual boundaries.</li>
+<li>Use <code>var(--hairline)</code> for normal separation.</li>
+<li>Use <code>var(--hairline-2)</code> for subtle nav and background rail lines.</li>
+</ul>
+<hr>
+<h2>6. State Grammar</h2>
+<p>Writer OS state should feel annotated, not badged.</p>
+<h3>State Dot</h3>
+<p>Use a small dot to indicate state in lists.</p>
+<pre><code class="language-css">
+.quiet-row::before {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+</code></pre>
+<p>State color mapping:</p>
+<ul>
+<li>active: rust</li>
+<li>ready: green</li>
+<li>source: blue</li>
+<li>open: amber</li>
+<li>inactive: quiet gray</li>
+</ul>
+<h3>State Label</h3>
+<p>Use mono uppercase labels:</p>
+<pre><code class="language-css">
+.state {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+</code></pre>
+<p>Labels should be short:</p>
+<ul>
+<li><code>Active</code></li>
+<li><code>Ready</code></li>
+<li><code>Source</code></li>
+<li><code>Open</code></li>
+<li><code>Captured</code></li>
+<li><code>Question</code></li>
+<li><code>Next</code></li>
+</ul>
+<p>Avoid:</p>
+<ul>
+<li><code>Needs immediate action</code></li>
+<li><code>High priority</code></li>
+<li><code>AI recommended</code></li>
+<li><code>Task status pending</code></li>
+</ul>
+<hr>
+<h2>7. Core Components</h2>
+<h3>Today Page</h3>
+<p>Purpose: orient the writer without turning the session into management.</p>
+<p>Required elements:</p>
+<ul>
+<li>date lockup</li>
+<li><code>Walk / Desk</code> mode switch</li>
+<li>page title</li>
+<li>one primary question or desk index</li>
+<li>three or fewer quiet signals</li>
+</ul>
+<p>Walk mode:</p>
+<ul>
+<li>one question</li>
+<li>very low density</li>
+<li>no source queue</li>
+<li>no operational controls beyond navigation</li>
+</ul>
+<p>Desk mode:</p>
+<ul>
+<li>short ordered work index</li>
+<li>still text-first</li>
+<li>no dashboard widgets</li>
+</ul>
+<h3>Primary Question</h3>
+<p>Use for the one live thought that should carry a walk.</p>
+<p>Rules:</p>
+<ul>
+<li>one per screen</li>
+<li>serif</li>
+<li>25-26px on mobile</li>
+<li>bounded by top and bottom ink rules</li>
+<li>no icon</li>
+<li>no assistant attribution</li>
+</ul>
+<h3>Quiet Row</h3>
+<p>Use for active signals, blockers, next work, and brief article/source state.</p>
+<p>Structure:</p>
+<ul>
+<li>state dot</li>
+<li>state label</li>
+<li>row title</li>
+<li>one-sentence explanation</li>
+</ul>
+<p>Do not add buttons inside quiet rows unless there is a clear user action.</p>
+<h3>Work Index</h3>
+<p>Used in Desk mode for ordered work.</p>
+<p>Structure:</p>
+<ul>
+<li>number</li>
+<li>sentence-length work item</li>
+<li>short state mark</li>
+</ul>
+<p>The work index is not a task list. It is a reading order.</p>
+<h3>Document Weather</h3>
+<p>Used to summarize article/source condition without creating a dashboard.</p>
+<p>Example dimensions:</p>
+<ul>
+<li>Draft</li>
+<li>Voice</li>
+<li>Lineage</li>
+<li>Risk</li>
+</ul>
+<p>Each weather cell should be terse: one label, one short value.</p>
+<h3>Source Note</h3>
+<p>Used for source excerpts and raw material.</p>
+<p>Structure:</p>
+<ul>
+<li>source label</li>
+<li>excerpt as serif quote</li>
+<li>one short contextual note</li>
+</ul>
+<p>Raw material should feel like cited marginalia, not an inbox.</p>
+<h3>System Page</h3>
+<p>Purpose: expose design/operating rules without leaving the app language.</p>
+<p>Use it for:</p>
+<ul>
+<li>rules of restraint</li>
+<li>token/type examples</li>
+<li>state examples</li>
+<li>implementation notes</li>
+</ul>
+<hr>
+<h2>8. Navigation</h2>
+<p>Navigation is a bottom text rail.</p>
+<p>Current nav:</p>
+<ul>
+<li>Today</li>
+<li>Walk</li>
+<li>Close</li>
+<li>Article</li>
+<li>Source</li>
+<li>System</li>
+</ul>
+<p>Rules:</p>
+<ul>
+<li>mono uppercase</li>
+<li>six items maximum</li>
+<li>equal-width tabs</li>
+<li>active tab uses muted page fill, not a loud color</li>
+<li>no icons unless usability testing proves text-only is failing</li>
+</ul>
+<p>Avoid:</p>
+<ul>
+<li>floating action buttons</li>
+<li>large bottom sheets</li>
+<li>icon-only controls</li>
+<li>colorful selected states</li>
+</ul>
+<hr>
+<h2>9. Motion</h2>
+<p>Motion principle: <strong>a page settles. Nothing performs.</strong></p>
+<p>Allowed:</p>
+<ul>
+<li>view opacity fade: <code>~220ms</code></li>
+<li>slight vertical settle: <code>translateY(8px)</code> to <code>0</code></li>
+<li>no bounce</li>
+<li>no spring</li>
+<li>no animated gradients</li>
+</ul>
+<p>Current transition:</p>
+<pre><code class="language-css">
+.view {
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 220ms ease, transform 260ms ease;
+}
+</code></pre>
+<p>Use motion only to preserve orientation. Never use motion as delight for its own sake.</p>
+<hr>
+<h2>10. Screen Patterns</h2>
+<h3>Walk Screen</h3>
+<p>The Walk screen should be the calmest surface.</p>
+<p>It should include:</p>
+<ul>
+<li>timer</li>
+<li>one captured thought</li>
+<li>one minimal capture control</li>
+</ul>
+<p>It should not include:</p>
+<ul>
+<li>transcript feed</li>
+<li>assistant replies</li>
+<li>source lists</li>
+<li>multi-step prompts</li>
+<li>dense controls</li>
+</ul>
+<h3>Close Screen</h3>
+<p>The Close screen should feel like filing, not finishing.</p>
+<p>It should include:</p>
+<ul>
+<li>captured note</li>
+<li>open question</li>
+<li>next page / next action</li>
+</ul>
+<p>Language should avoid false completion. Good words:</p>
+<ul>
+<li>filed</li>
+<li>captured</li>
+<li>next</li>
+<li>open</li>
+<li>return</li>
+</ul>
+<p>Avoid:</p>
+<ul>
+<li>completed</li>
+<li>resolved</li>
+<li>done</li>
+<li>optimized</li>
+</ul>
+<h3>Article Screen</h3>
+<p>The Article screen should remain prose-led.</p>
+<p>Use:</p>
+<ul>
+<li>article title</li>
+<li>lede</li>
+<li>document weather</li>
+<li>outline beats</li>
+</ul>
+<p>Avoid:</p>
+<ul>
+<li>kanban stages</li>
+<li>progress percentages</li>
+<li>revision score</li>
+<li>AI critique panel</li>
+</ul>
+<h3>Source Screen</h3>
+<p>The Source screen treats raw material as excerpts.</p>
+<p>Use:</p>
+<ul>
+<li>source codes</li>
+<li>blockquotes</li>
+<li>short contextual notes</li>
+</ul>
+<p>Avoid:</p>
+<ul>
+<li>generic file list</li>
+<li>upload/inbox UI</li>
+<li>checkboxes</li>
+<li>bulk management controls</li>
+</ul>
+<hr>
+<h2>11. Accessibility And Usability</h2>
+<h3>Contrast</h3>
+<p>Text should meet WCAG AA contrast in both light and night modes.</p>
+<p>Special attention:</p>
+<ul>
+<li><code>--ink-3</code> metadata is intentionally quiet; do not use it for essential body copy.</li>
+<li>state colors should never be the only indicator; pair color with text labels.</li>
+</ul>
+<h3>Touch Targets</h3>
+<ul>
+<li>Navigation tabs: minimum height <code>72px</code>.</li>
+<li>Mode buttons: minimum height <code>42px</code>.</li>
+<li>Avoid tiny icon-only controls.</li>
+</ul>
+<h3>Text Fit</h3>
+<ul>
+<li>Do not truncate primary questions.</li>
+<li>Do not force one-line labels if they need space.</li>
+<li>Keep nav labels short.</li>
+<li>Keep source and state labels compact.</li>
+</ul>
+<h3>Reduced Motion</h3>
+<p>If implementing in production, respect <code>prefers-reduced-motion</code>:</p>
+<pre><code class="language-css">
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+</code></pre>
+<hr>
+<h2>12. Implementation Notes</h2>
+<h3>Recommended Structure</h3>
+<p>Treat the design system as a small token/component layer:</p>
+<ul>
+<li>tokens: color, type, spacing, rule weights</li>
+<li>primitives: page, rail, rule, state label, state dot</li>
+<li>components: today page, quiet row, work index, document weather, source note</li>
+<li>screen compositions: Today, Walk, Close, Article, Source, System</li>
+</ul>
+<h3>Component Naming</h3>
+<p>Suggested names:</p>
+<ul>
+<li><code>PageShell</code></li>
+<li><code>PageRail</code></li>
+<li><code>PageMark</code></li>
+<li><code>BottomNav</code></li>
+<li><code>ModeSwitch</code></li>
+<li><code>PrimaryQuestion</code></li>
+<li><code>QuietRow</code></li>
+<li><code>WorkIndex</code></li>
+<li><code>DocumentWeather</code></li>
+<li><code>SourceNote</code></li>
+<li><code>FiledNote</code></li>
+<li><code>SystemSpecRow</code></li>
+</ul>
+<h3>State Names</h3>
+<p>Use semantic state names in code:</p>
+<pre><code class="language-ts">
+type WriterState = &quot;active&quot; | &quot;ready&quot; | &quot;source&quot; | &quot;open&quot; | &quot;inactive&quot;;
+</code></pre>
+<p>Do not name states by color.</p>
+<h3>Content Constraints</h3>
+<p>The design depends on disciplined copy.</p>
+<p>Recommended limits:</p>
+<ul>
+<li>primary question: 1 sentence</li>
+<li>quiet row title: 3-7 words</li>
+<li>quiet row body: 1 sentence</li>
+<li>weather value: 1-2 words</li>
+<li>source note context: 1 sentence</li>
+</ul>
+<hr>
+<h2>13. Acceptance Checklist</h2>
+<p>Before shipping a screen, verify:</p>
+<ul>
+<li>The screen can be understood in under five seconds.</li>
+<li>The page has one dominant thought.</li>
+<li>The UI does not look like chat.</li>
+<li>The UI does not look like a dashboard.</li>
+<li>Color is only used for state.</li>
+<li>Body copy remains readable in light and night modes.</li>
+<li>State is communicated by text plus color, not color alone.</li>
+<li>The writer is not asked to manage more than the current surface needs.</li>
+<li>The screen still works if all decorative cues are removed.</li>
+</ul>
+<hr>
+<h2>14. Current Artifacts</h2>
+<ul>
+<li>Visual prototype: <code>writer-os-ui-minimal.html</code></li>
+<li>PDF export: <code>writer-os-ui-minimal.pdf</code></li>
+<li>Earlier alternate direction: <code>writer-os-ui-prototype.html</code></li>
+</ul>
+<p>Use the minimal HTML prototype as the canonical visual reference. Use the earlier field-notebook prototype only as historical exploration.</p></main></body>
+</html>
