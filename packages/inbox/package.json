@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@writer-os/db": "workspace:*",
+    "@writer-os/llm": "workspace:*",
     "@writer-os/shared-types": "workspace:*",
     "drizzle-orm": "^0.36.0"
   },
