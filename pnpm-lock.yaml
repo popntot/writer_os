@@ -113,6 +113,9 @@ importers:
       '@writer-os/db':
         specifier: workspace:*
         version: link:../db
+      '@writer-os/llm':
+        specifier: workspace:*
+        version: link:../llm
       '@writer-os/shared-types':
         specifier: workspace:*
         version: link:../shared-types

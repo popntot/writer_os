@@ -69,6 +69,51 @@ function createNoopLLM(): LLMClient {
   };
 }
 
+function createJsonLLM(
+  responseForCall: (opts: ChatOptions) => string | Promise<string>,
+  onCall?: () => void,
+): LLMClient {
+  const resultForText = (text: string): ChatResult => ({
+    text,
+    usage: {
+      model: "test",
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheCreationInputTokens: 0,
+      cacheReadInputTokens: 0,
+      costUsd: 0,
+      durationMs: 0,
+    },
+  });
+
+  return {
+    chat: async (opts: ChatOptions): Promise<ChatResult> => {
+      onCall?.();
+      return resultForText(await responseForCall(opts));
+    },
+    stream: (_opts: ChatOptions): LLMStream => {
+      const result = resultForText("");
+      return {
+        done: Promise.resolve(result),
+        async *[Symbol.asyncIterator](): AsyncIterator<string> {},
+      };
+    },
+  };
+}
+
+function createThrowingLLM(onCall?: () => void): LLMClient {
+  return {
+    chat: async (_opts: ChatOptions): Promise<ChatResult> => {
+      onCall?.();
+      throw new Error("triage model unavailable");
+    },
+    stream: (_opts: ChatOptions): LLMStream => ({
+      done: Promise.reject(new Error("triage model unavailable")),
+      async *[Symbol.asyncIterator](): AsyncIterator<string> {},
+    }),
+  };
+}
+
 async function applyMigrations(): Promise<void> {
   const migrationsDir = resolve(
     __dirname,
@@ -88,9 +133,20 @@ async function applyMigrations(): Promise<void> {
 function createTestEngine(triageStub?: TriageStub) {
   return createInboxTriageEngine({
     db: handle.db,
-    llm: createNoopLLM(),
     ingestionPipeline: createSourceIngestionPipeline({ db: handle.db }),
     ...(triageStub !== undefined ? { triageStub } : {}),
+  });
+}
+
+function createRealTriageEngine(
+  llm: LLMClient,
+  thresholds: { highConfidence?: number; lowConfidence?: number } = {},
+) {
+  return createInboxTriageEngine({
+    db: handle.db,
+    llm,
+    ingestionPipeline: createSourceIngestionPipeline({ db: handle.db }),
+    ...thresholds,
   });
 }
 
@@ -105,6 +161,29 @@ async function createProject(title: string): Promise<string> {
   }
 
   return project.id;
+}
+
+async function createSource(projectId: string, title: string): Promise<string> {
+  const [source] = await handle.db
+    .insert(schema.sources)
+    .values({
+      projectId,
+      type: "text",
+      title,
+      cachedContentRef: `seed:${title}`,
+    })
+    .returning({ id: schema.sources.id });
+
+  if (source === undefined) {
+    throw new Error("failed to create source");
+  }
+
+  return source.id;
+}
+
+async function sourceCount(): Promise<number> {
+  return (await handle.db.select({ id: schema.sources.id }).from(schema.sources))
+    .length;
 }
 
 async function depositText(body = "A note worth triaging."): Promise<string> {
@@ -394,5 +473,276 @@ describe("Writer OS API inbox", () => {
 
     expect(result).toEqual({ archived: [itemId] });
     expect((await readInboxItem(itemId)).status).toBe("stale");
+  });
+
+  test("real LLM high-confidence triage auto-files, creates a source, and stores reasoning", async () => {
+    const projectId = await createProject("High confidence project");
+    await createSource(projectId, "Existing high-confidence source");
+    const beforeSources = await sourceCount();
+    const itemId = await depositText("This belongs in the high confidence project.");
+    const engine = createRealTriageEngine(
+      createJsonLLM(() =>
+        JSON.stringify({
+          project_id: projectId,
+          confidence: 0.91,
+          reasoning: "The note directly matches the seeded project.",
+        }),
+      ),
+    );
+
+    const decision = await engine.triageItem(itemId);
+    const item = await readInboxItem(itemId);
+
+    expect(decision.kind).toBe("auto-filed");
+    expect(decision).toMatchObject({
+      projectId,
+      confidence: 0.91,
+      reasoning: "The note directly matches the seeded project.",
+    });
+    expect(decision.kind === "auto-filed" ? decision.sourceId : null).toEqual(
+      expect.any(String),
+    );
+    expect(item.status).toBe("triaged-auto");
+    expect(item.sourceId).toEqual(expect.any(String));
+    expect(item.agentReasoning).toBe(
+      "The note directly matches the seeded project.",
+    );
+    expect(await sourceCount()).toBe(beforeSources + 1);
+  });
+
+  test("real LLM low-confidence triage proposes a project without creating a source", async () => {
+    const projectId = await createProject("Low confidence project");
+    await createSource(projectId, "Existing low-confidence source");
+    const beforeSources = await sourceCount();
+    const itemId = await depositText("This might fit the low confidence project.");
+    const engine = createRealTriageEngine(
+      createJsonLLM(() =>
+        JSON.stringify({
+          project_id: projectId,
+          confidence: 0.65,
+          reasoning: "Some overlap, but not enough to auto-file.",
+        }),
+      ),
+    );
+
+    const decision = await engine.triageItem(itemId);
+    const item = await readInboxItem(itemId);
+
+    expect(decision).toEqual({
+      kind: "proposed",
+      projectId,
+      confidence: 0.65,
+      reasoning: "Some overlap, but not enough to auto-file.",
+    });
+    expect(item.status).toBe("triaged-pending");
+    expect(item.proposedProjectId).toBe(projectId);
+    expect(item.sourceId).toBeNull();
+    expect(item.agentReasoning).toBe("Some overlap, but not enough to auto-file.");
+    expect(await sourceCount()).toBe(beforeSources);
+  });
+
+  test("real LLM below-low-confidence triage records no-match without creating a source", async () => {
+    const projectId = await createProject("No match project");
+    await createSource(projectId, "Existing no-match source");
+    const beforeSources = await sourceCount();
+    const itemId = await depositText("This is too ambiguous to file.");
+    const engine = createRealTriageEngine(
+      createJsonLLM(() =>
+        JSON.stringify({
+          project_id: projectId,
+          confidence: 0.31,
+          reasoning: "The candidate is too weak.",
+        }),
+      ),
+    );
+
+    const decision = await engine.triageItem(itemId);
+    const item = await readInboxItem(itemId);
+
+    expect(decision).toEqual({
+      kind: "no-match",
+      reasoning: "The candidate is too weak.",
+    });
+    expect(item.status).toBe("triaged-pending");
+    expect(item.proposedProjectId).toBeNull();
+    expect(item.sourceId).toBeNull();
+    expect(item.agentReasoning).toBe("The candidate is too weak.");
+    expect(await sourceCount()).toBe(beforeSources);
+  });
+
+  test("real LLM triage is idempotent and does not reinvoke the LLM after a decision exists", async () => {
+    const projectId = await createProject("Real idempotent project");
+    await createSource(projectId, "Existing idempotent source");
+    const itemId = await depositText("idempotent body");
+    let calls = 0;
+    const engine = createRealTriageEngine(
+      createJsonLLM(
+        () =>
+          JSON.stringify({
+            project_id: projectId,
+            confidence: 0.66,
+            reasoning: "First pass only.",
+          }),
+        () => {
+          calls += 1;
+        },
+      ),
+    );
+
+    const first = await engine.triageItem(itemId);
+    const second = await engine.triageItem(itemId);
+
+    expect(second).toEqual(first);
+    expect(calls).toBe(1);
+  });
+
+  test("runAuditWindowSweep leaves boundary items and files post-boundary items", async () => {
+    const projectId = await createProject("Audit boundary project");
+    const boundarySourceId = crypto.randomUUID();
+    const postBoundarySourceId = crypto.randomUUID();
+    const boundaryItemId = crypto.randomUUID();
+    const postBoundaryItemId = crypto.randomUUID();
+    const now = new Date("2026-05-08T00:00:00.000Z");
+    const boundaryDepositedAt = new Date("2026-05-01T00:00:00.000Z");
+    const postBoundaryDepositedAt = new Date("2026-04-30T23:59:59.999Z");
+
+    await handle.db.insert(schema.sources).values([
+      {
+        id: boundarySourceId,
+        projectId,
+        type: "text",
+        title: "Boundary source",
+        cachedContentRef: `inline:${boundarySourceId}`,
+        firstSeenAt: boundaryDepositedAt,
+        lastReferencedAt: boundaryDepositedAt,
+      },
+      {
+        id: postBoundarySourceId,
+        projectId,
+        type: "text",
+        title: "Post-boundary source",
+        cachedContentRef: `inline:${postBoundarySourceId}`,
+        firstSeenAt: postBoundaryDepositedAt,
+        lastReferencedAt: postBoundaryDepositedAt,
+      },
+    ]);
+    await handle.db.insert(schema.inboxItems).values([
+      {
+        id: boundaryItemId,
+        rawContentRef:
+          "inline-json:%7B%22type%22%3A%22text%22%2C%22body%22%3A%22boundary%22%7D",
+        contentType: "text",
+        captureSurface: "ios-app-dump",
+        status: "triaged-auto",
+        decisionKind: "auto-filed",
+        decisionProjectId: projectId,
+        decisionSourceId: boundarySourceId,
+        confidence: 0.9,
+        agentReasoning: "boundary",
+        resolvedProjectId: projectId,
+        sourceId: boundarySourceId,
+        proposedProjectId: projectId,
+        depositedAt: boundaryDepositedAt,
+        triagedAt: boundaryDepositedAt,
+        lastActionAt: boundaryDepositedAt,
+      },
+      {
+        id: postBoundaryItemId,
+        rawContentRef:
+          "inline-json:%7B%22type%22%3A%22text%22%2C%22body%22%3A%22post%22%7D",
+        contentType: "text",
+        captureSurface: "ios-app-dump",
+        status: "triaged-auto",
+        decisionKind: "auto-filed",
+        decisionProjectId: projectId,
+        decisionSourceId: postBoundarySourceId,
+        confidence: 0.9,
+        agentReasoning: "post-boundary",
+        resolvedProjectId: projectId,
+        sourceId: postBoundarySourceId,
+        proposedProjectId: projectId,
+        depositedAt: postBoundaryDepositedAt,
+        triagedAt: postBoundaryDepositedAt,
+        lastActionAt: postBoundaryDepositedAt,
+      },
+    ]);
+
+    const result = await createTestEngine().runAuditWindowSweep(now);
+
+    expect(result).toEqual({ filed: [postBoundaryItemId] });
+    expect((await readInboxItem(boundaryItemId)).status).toBe("triaged-auto");
+    expect((await readInboxItem(postBoundaryItemId)).status).toBe("filed");
+  });
+
+  test("runStaleSweep leaves boundary items and archives post-boundary items", async () => {
+    const projectId = await createProject("Stale boundary project");
+    const boundaryItemId = crypto.randomUUID();
+    const postBoundaryItemId = crypto.randomUUID();
+    const now = new Date("2026-05-31T00:00:00.000Z");
+    const boundaryLastActionAt = new Date("2026-05-01T00:00:00.000Z");
+    const postBoundaryLastActionAt = new Date("2026-04-30T23:59:59.999Z");
+
+    await handle.db.insert(schema.inboxItems).values([
+      {
+        id: boundaryItemId,
+        rawContentRef:
+          "inline-json:%7B%22type%22%3A%22text%22%2C%22body%22%3A%22boundary%22%7D",
+        contentType: "text",
+        captureSurface: "ios-app-dump",
+        status: "triaged-pending",
+        decisionKind: "proposed",
+        decisionProjectId: projectId,
+        confidence: 0.6,
+        agentReasoning: "boundary",
+        proposedProjectId: projectId,
+        depositedAt: boundaryLastActionAt,
+        triagedAt: boundaryLastActionAt,
+        lastActionAt: boundaryLastActionAt,
+      },
+      {
+        id: postBoundaryItemId,
+        rawContentRef:
+          "inline-json:%7B%22type%22%3A%22text%22%2C%22body%22%3A%22post%22%7D",
+        contentType: "text",
+        captureSurface: "ios-app-dump",
+        status: "triaged-pending",
+        decisionKind: "proposed",
+        decisionProjectId: projectId,
+        confidence: 0.6,
+        agentReasoning: "post-boundary",
+        proposedProjectId: projectId,
+        depositedAt: postBoundaryLastActionAt,
+        triagedAt: postBoundaryLastActionAt,
+        lastActionAt: postBoundaryLastActionAt,
+      },
+    ]);
+
+    const result = await createTestEngine().runStaleSweep(now);
+
+    expect(result).toEqual({ archived: [postBoundaryItemId] });
+    expect((await readInboxItem(boundaryItemId)).status).toBe(
+      "triaged-pending",
+    );
+    expect((await readInboxItem(postBoundaryItemId)).status).toBe("stale");
+  });
+
+  test("LLM failure marks the item triage-failed and preserves the error reasoning", async () => {
+    await createProject("Failure project");
+    const itemId = await depositText("this will fail");
+    let calls = 0;
+    const engine = createRealTriageEngine(
+      createThrowingLLM(() => {
+        calls += 1;
+      }),
+    );
+
+    await expect(engine.triageItem(itemId)).rejects.toThrow(
+      "triage model unavailable",
+    );
+
+    const item = await readInboxItem(itemId);
+    expect(calls).toBe(1);
+    expect(item.status).toBe("triage-failed");
+    expect(item.agentReasoning).toBe("triage model unavailable");
   });
 });

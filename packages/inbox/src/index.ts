@@ -1,5 +1,6 @@
-import { and, asc, desc, eq, gte, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, lt, sql, type SQL } from "drizzle-orm";
 import { schema, type AppDatabase, type InboxItemRow } from "@writer-os/db";
+import type { LLMClient } from "@writer-os/llm";
 import type {
   CaptureSurface,
   InboxItem,
@@ -19,7 +20,13 @@ export type {
   SourceIngestionPipeline,
   TriageDecision,
 } from "@writer-os/shared-types";
+export type { LLMClient } from "@writer-os/llm";
 export { createSourceIngestionPipeline } from "./source-ingestion.js";
+
+// Env-driven defaults. API callers may override these with
+// WRITER_OS_TRIAGE_HIGH_CONFIDENCE and WRITER_OS_TRIAGE_LOW_CONFIDENCE.
+export const DEFAULT_TRIAGE_HIGH_CONFIDENCE = 0.8;
+export const DEFAULT_TRIAGE_LOW_CONFIDENCE = 0.5;
 
 export type TriageStub = (input: {
   item: InboxItem;
@@ -28,19 +35,33 @@ export type TriageStub = (input: {
 
 export interface InboxTriageEngineDeps {
   db: AppDatabase;
-  llm?: unknown;
+  llm?: LLMClient;
   ingestionPipeline: SourceIngestionPipeline;
   triageStub?: TriageStub;
+  highConfidence?: number;
+  lowConfidence?: number;
 }
 
 const AUDIT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 const STALE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+const CANDIDATE_LIMIT = 5;
 
 export function createInboxTriageEngine(
   deps: InboxTriageEngineDeps,
 ): InboxTriageEngine {
-  void deps.llm;
-  const triage = deps.triageStub ?? createDefaultTriageStub(deps.db);
+  const highConfidence =
+    deps.highConfidence ?? DEFAULT_TRIAGE_HIGH_CONFIDENCE;
+  const lowConfidence = deps.lowConfidence ?? DEFAULT_TRIAGE_LOW_CONFIDENCE;
+  const triage =
+    deps.triageStub ??
+    (deps.llm !== undefined
+      ? createRealTriage({
+          db: deps.db,
+          llm: deps.llm,
+          highConfidence,
+          lowConfidence,
+        })
+      : createDefaultTriageStub(deps.db));
 
   return {
     deposit: async (input) => {
@@ -309,6 +330,411 @@ export function createInboxTriageEngine(
       return { archived };
     },
   };
+}
+
+interface RealTriageDeps {
+  db: AppDatabase;
+  llm: LLMClient;
+  highConfidence: number;
+  lowConfidence: number;
+}
+
+interface TriageCandidate {
+  projectId: string;
+  projectTitle: string;
+  trueLineExcerpt: string | null;
+  lastSourceTitle: string | null;
+  similarity: number | null;
+}
+
+interface RawLLMClassification {
+  projectId: string | null;
+  confidence: number;
+  reasoning: string;
+}
+
+type EmbeddingCapableLLM = LLMClient & {
+  embed?: (
+    input: string | { input: string },
+  ) => Promise<
+    | number[]
+    | {
+        embedding?: number[];
+        embeddings?: number[][];
+        data?: Array<{ embedding: number[] }>;
+      }
+  >;
+};
+
+function createRealTriage(deps: RealTriageDeps): TriageStub {
+  return async ({ item, rawContent }) => {
+    const content = textForTriage(rawContent);
+    const candidates = await retrieveCandidates(deps.db, deps.llm, content);
+    const response = await deps.llm.chat({
+      system:
+        "You classify Writer OS inbox deposits into existing writing projects. Return only valid JSON with keys project_id, confidence, and reasoning. Use null project_id when no candidate fits.",
+      messages: [
+        {
+          role: "user",
+          content: buildTriagePrompt({ item, content, candidates }),
+        },
+      ],
+      maxTokens: 700,
+      temperature: 0,
+    });
+    const classification = parseLLMClassification(response.text);
+    const candidateIds = new Set(
+      candidates.map((candidate) => candidate.projectId),
+    );
+
+    if (
+      classification.projectId === null ||
+      !candidateIds.has(classification.projectId) ||
+      classification.confidence < deps.lowConfidence
+    ) {
+      return {
+        kind: "no-match",
+        reasoning: classification.reasoning,
+      };
+    }
+
+    if (classification.confidence >= deps.highConfidence) {
+      return {
+        kind: "auto-filed",
+        projectId: classification.projectId,
+        sourceId: "pending-ingestion",
+        confidence: classification.confidence,
+        reasoning: classification.reasoning,
+      };
+    }
+
+    return {
+      kind: "proposed",
+      projectId: classification.projectId,
+      confidence: classification.confidence,
+      reasoning: classification.reasoning,
+    };
+  };
+}
+
+async function retrieveCandidates(
+  db: AppDatabase,
+  llm: LLMClient,
+  content: string,
+): Promise<TriageCandidate[]> {
+  const vectorReady = await hasPgVectorEmbeddingColumn(db);
+  const embedding = vectorReady ? await tryEmbed(llm, content) : null;
+
+  if (vectorReady && embedding !== null) {
+    const candidates = await retrieveVectorCandidates(db, embedding);
+    if (candidates.length > 0) {
+      return candidates;
+    }
+  }
+
+  // TODO(real-embeddings): LLMClient does not expose embeddings yet. In PGlite
+  // the migration also uses a text fallback column, so retrieval deliberately
+  // falls back to the existing most-recently-touched project heuristic while
+  // still asking the LLM to classify and explain the decision.
+  const fallback = await mostRecentlyTouchedCandidate(db);
+  return fallback === null ? [] : [fallback];
+}
+
+async function tryEmbed(
+  llm: LLMClient,
+  content: string,
+): Promise<number[] | null> {
+  const embed = (llm as EmbeddingCapableLLM).embed;
+  if (typeof embed !== "function") {
+    return null;
+  }
+
+  const result = await embed.call(llm, content);
+  if (
+    Array.isArray(result) &&
+    result.every((value) => typeof value === "number")
+  ) {
+    return result;
+  }
+
+  if (typeof result !== "object" || result === null) {
+    throw new Error("LLM embed returned an unsupported shape");
+  }
+
+  const obj = result as Exclude<typeof result, number[]>;
+  if (Array.isArray(obj.embedding)) {
+    return obj.embedding;
+  }
+  if (Array.isArray(obj.embeddings) && Array.isArray(obj.embeddings[0])) {
+    const [firstEmbedding] = obj.embeddings;
+    return firstEmbedding ?? null;
+  }
+  if (Array.isArray(obj.data) && Array.isArray(obj.data[0]?.embedding)) {
+    const [firstEmbedding] = obj.data;
+    return firstEmbedding?.embedding ?? null;
+  }
+
+  throw new Error("LLM embed returned an unsupported shape");
+}
+
+async function hasPgVectorEmbeddingColumn(db: AppDatabase): Promise<boolean> {
+  try {
+    const rows = await executeRows<{
+      data_type: string | null;
+      udt_name: string | null;
+    }>(
+      db,
+      sql`
+        select data_type, udt_name
+        from information_schema.columns
+        where table_name = 'embeddings'
+          and column_name = 'embedding'
+        limit 1
+      `,
+    );
+    const row = rows[0];
+    return row?.udt_name === "vector" || row?.data_type === "vector";
+  } catch {
+    return false;
+  }
+}
+
+async function retrieveVectorCandidates(
+  db: AppDatabase,
+  embedding: number[],
+): Promise<TriageCandidate[]> {
+  const vectorLiteral = `[${embedding.join(",")}]`;
+  const rows = await executeRows<{
+    project_id: string;
+    project_title: string;
+    true_line_content: string | null;
+    last_source_title: string | null;
+    similarity: number | string | null;
+  }>(
+    db,
+    sql`
+      select
+        p.id as project_id,
+        p.title as project_title,
+        latest_true_line.content as true_line_content,
+        latest_source.title as last_source_title,
+        (1 - (e.embedding <=> ${vectorLiteral}::vector)) as similarity
+      from embeddings e
+      join sources s on s.id = e.source_id
+      join projects p on p.id = coalesce(e.project_id, s.project_id)
+      left join lateral (
+        select content
+        from true_line_versions
+        where project_id = p.id
+        order by version desc
+        limit 1
+      ) latest_true_line on true
+      left join lateral (
+        select title
+        from sources
+        where project_id = p.id
+        order by last_referenced_at desc
+        limit 1
+      ) latest_source on true
+      where coalesce(e.project_id, s.project_id) is not null
+      order by e.embedding <=> ${vectorLiteral}::vector
+      limit ${CANDIDATE_LIMIT * 3}
+    `,
+  );
+  const seen = new Set<string>();
+  const candidates: TriageCandidate[] = [];
+
+  for (const row of rows) {
+    if (seen.has(row.project_id)) {
+      continue;
+    }
+    seen.add(row.project_id);
+    candidates.push({
+      projectId: row.project_id,
+      projectTitle: row.project_title,
+      trueLineExcerpt: excerpt(row.true_line_content),
+      lastSourceTitle: row.last_source_title,
+      similarity:
+        row.similarity === null
+          ? null
+          : Number.parseFloat(String(row.similarity)),
+    });
+    if (candidates.length >= CANDIDATE_LIMIT) {
+      break;
+    }
+  }
+
+  return candidates;
+}
+
+async function mostRecentlyTouchedCandidate(
+  db: AppDatabase,
+): Promise<TriageCandidate | null> {
+  const [project] = await db
+    .select({ id: schema.projects.id, title: schema.projects.title })
+    .from(schema.projects)
+    .orderBy(
+      desc(
+        sql`coalesce(${schema.projects.nextSessionStarterUpdatedAt}, ${schema.projects.createdAt})`,
+      ),
+    )
+    .limit(1);
+
+  if (project === undefined) {
+    return null;
+  }
+
+  const [trueLine] = await db
+    .select({ content: schema.trueLineVersions.content })
+    .from(schema.trueLineVersions)
+    .where(eq(schema.trueLineVersions.projectId, project.id))
+    .orderBy(desc(schema.trueLineVersions.version))
+    .limit(1);
+  const [source] = await db
+    .select({ title: schema.sources.title })
+    .from(schema.sources)
+    .where(eq(schema.sources.projectId, project.id))
+    .orderBy(desc(schema.sources.lastReferencedAt))
+    .limit(1);
+
+  return {
+    projectId: project.id,
+    projectTitle: project.title,
+    trueLineExcerpt: excerpt(trueLine?.content ?? null),
+    lastSourceTitle: source?.title ?? null,
+    similarity: null,
+  };
+}
+
+async function executeRows<T>(
+  db: AppDatabase,
+  query: SQL,
+): Promise<T[]> {
+  const result = await (
+    db as AppDatabase & { execute: (query: SQL) => Promise<unknown> }
+  ).execute(query);
+  if (Array.isArray(result)) {
+    return result as T[];
+  }
+  if (isRecord(result) && Array.isArray(result.rows)) {
+    return result.rows as T[];
+  }
+  return [];
+}
+
+function buildTriagePrompt(input: {
+  item: InboxItem;
+  content: string;
+  candidates: TriageCandidate[];
+}): string {
+  return JSON.stringify(
+    {
+      task:
+        "Choose the best project for this inbox item. Return JSON only: {\"project_id\": string|null, \"confidence\": number, \"reasoning\": string}.",
+      inbox_item: {
+        id: input.item.id,
+        content_type: input.item.contentType,
+        capture_surface: input.item.captureSurface,
+        content_excerpt: excerpt(input.content, 1600),
+      },
+      candidates: input.candidates.map((candidate) => ({
+        project_id: candidate.projectId,
+        project_name: candidate.projectTitle,
+        true_line_excerpt: candidate.trueLineExcerpt,
+        last_source_title: candidate.lastSourceTitle,
+        embedding_similarity: candidate.similarity,
+      })),
+      scoring:
+        "Use 0.0-1.0 confidence. Prefer null project_id below a weak match. Pick only listed project_id values.",
+    },
+    null,
+    2,
+  );
+}
+
+function parseLLMClassification(text: string): RawLLMClassification {
+  const parsed = JSON.parse(extractJsonObject(text)) as unknown;
+  if (!isRecord(parsed)) {
+    throw new Error("triage LLM returned non-object JSON");
+  }
+
+  const projectIdValue = parsed.project_id ?? parsed.projectId;
+  const confidenceValue = parsed.confidence;
+  const reasoningValue = parsed.reasoning;
+
+  if (
+    projectIdValue !== null &&
+    projectIdValue !== undefined &&
+    typeof projectIdValue !== "string"
+  ) {
+    throw new Error("triage LLM returned invalid project_id");
+  }
+  if (
+    typeof confidenceValue !== "number" ||
+    !Number.isFinite(confidenceValue)
+  ) {
+    throw new Error("triage LLM returned invalid confidence");
+  }
+  if (typeof reasoningValue !== "string" || reasoningValue.trim().length === 0) {
+    throw new Error("triage LLM returned invalid reasoning");
+  }
+
+  const projectId =
+    typeof projectIdValue === "string" ? projectIdValue : null;
+
+  return {
+    projectId,
+    confidence: Math.max(0, Math.min(1, confidenceValue)),
+    reasoning: reasoningValue.trim(),
+  };
+}
+
+function extractJsonObject(text: string): string {
+  const trimmed = text.trim();
+  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+    return trimmed;
+  }
+
+  const fenced = trimmed.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/u);
+  if (fenced?.[1] !== undefined) {
+    return fenced[1];
+  }
+
+  const start = trimmed.indexOf("{");
+  const end = trimmed.lastIndexOf("}");
+  if (start >= 0 && end > start) {
+    return trimmed.slice(start, end + 1);
+  }
+
+  throw new Error("triage LLM did not return JSON");
+}
+
+function textForTriage(raw: RawContent): string {
+  switch (raw.type) {
+    case "text":
+      return [raw.suppliedTitle, raw.body].filter(Boolean).join("\n\n");
+    case "url":
+      return raw.url;
+    case "pdf":
+      return [raw.filename, raw.blobRef].filter(Boolean).join("\n");
+    case "voice-memo":
+      return `${raw.audioRef}\nduration_ms: ${raw.durationMs}`;
+    case "image":
+      return raw.imageRef;
+    case "book-reference":
+      return [raw.title, raw.author, raw.notes].filter(Boolean).join("\n");
+  }
+}
+
+function excerpt(value: string | null | undefined, limit = 500): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  const normalized = value.replace(/\s+/gu, " ").trim();
+  if (normalized.length === 0) {
+    return null;
+  }
+  return normalized.length > limit ? normalized.slice(0, limit) : normalized;
 }
 
 function createDefaultTriageStub(db: AppDatabase): TriageStub {
