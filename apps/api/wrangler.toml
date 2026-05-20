@@ -7,5 +7,9 @@ compatibility_flags = ["nodejs_compat"]
 [vars]
 ENVIRONMENT = "development"
 
+# Drives inbox audit-window expiry and stale-item archival sweeps.
+[triggers]
+crons = ["0 * * * *"]
+
 # DATABASE_URL and WRITER_OS_API_SECRET are set as secrets, not vars.
 # Locally they live in `.dev.vars` (gitignored) — see apps/api/README.md.
