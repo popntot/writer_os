@@ -1,0 +1,42 @@
+:root {
+  --ground: #fbfaf6;
+  --page: #fffffb;
+  --page-muted: #f4f1e8;
+
+  --ink: #171512;
+  --ink-2: #49443b;
+  --ink-3: #858072;
+
+  --hairline: #d9d3c5;
+  --hairline-2: #ece7db;
+
+  --active: #7d3b25;
+  --ready: #50684e;
+  --source: #3c6672;
+  --open: #9a741c;
+
+  --shadow: rgba(42, 34, 22, 0.08);
+
+  --serif: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  --mono: "SF Mono", "IBM Plex Mono", "JetBrains Mono", Menlo, monospace;
+}
+
+:root[data-tone="night"] {
+  --ground: #11110f;
+  --page: #191916;
+  --page-muted: #202018;
+
+  --ink: #f3ecdc;
+  --ink-2: #cfc4ac;
+  --ink-3: #8f856f;
+
+  --hairline: #454131;
+  --hairline-2: #2d2b22;
+
+  --active: #cc8063;
+  --ready: #aab894;
+  --source: #9bbbc2;
+  --open: #d0ab4a;
+
+  --shadow: rgba(0, 0, 0, 0.24);
+}

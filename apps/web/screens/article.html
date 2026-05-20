@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en" data-tone="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Writer OS - Article</title>
+  <link rel="stylesheet" href="../css/tokens.css">
+  <link rel="stylesheet" href="../css/primitives.css">
+</head>
+<body>
+  <main class="stage">
+    <section class="device" aria-label="Article screen">
+      <div class="screen">
+        <div class="chrome">
+          <span>Writer OS</span>
+          <button class="tone-toggle" type="button" aria-pressed="false">Night</button>
+        </div>
+
+        <div class="page-mark">Article / Outline</div>
+
+        <section class="view">
+          <div class="scroll">
+            <div class="measure">
+              <p class="label">Article</p>
+              <h1>Article 0</h1>
+              <p class="article-lede">A short preamble about lineage, process honesty, and the terms on which the reader is being invited in.</p>
+
+              <div class="document-weather">
+                <div class="weather-cell weather-active">
+                  <span>Draft</span>
+                  <p>Not yet</p>
+                </div>
+                <div class="weather-cell weather-ready">
+                  <span>Voice</span>
+                  <p>Letter</p>
+                </div>
+                <div class="weather-cell weather-source">
+                  <span>Lineage</span>
+                  <p>Warm</p>
+                </div>
+                <div class="weather-cell weather-open">
+                  <span>Risk</span>
+                  <p>Overclaim</p>
+                </div>
+              </div>
+
+              <div class="beat-list">
+                <div class="beat">
+                  <p><strong>Calibration.</strong> Letter-tempo, plain prose, no manifesto posture.</p>
+                </div>
+                <div class="beat">
+                  <p><strong>Lineage.</strong> Name only the thinkers actually engaged with.</p>
+                </div>
+                <div class="beat">
+                  <p><strong>Disclosure.</strong> Plain, forward, unburied, with no apology.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <nav class="nav" aria-label="Reference navigation">
+          <a class="nav-link" href="today.html">Today</a>
+          <a class="nav-link" href="walk.html">Walk</a>
+          <a class="nav-link" href="close.html">Close</a>
+          <a class="nav-link active" href="article.html">Article</a>
+          <a class="nav-link" href="source.html">Source</a>
+          <a class="nav-link" href="system.html">System</a>
+        </nav>
+      </div>
+    </section>
+
+    <aside class="board" aria-label="Article reference notes">
+      <p class="label">Article screen</p>
+      <h2>Prose first, weather second.</h2>
+      <p>Document weather stays terse and subordinate to the title, lede, and outline beats.</p>
+    </aside>
+  </main>
+
+  <script>
+    (() => {
+      const root = document.documentElement;
+      const toggle = document.querySelector(".tone-toggle");
+
+      function setTone(tone) {
+        root.dataset.tone = tone;
+        const night = tone === "night";
+        toggle.textContent = night ? "Day" : "Night";
+        toggle.setAttribute("aria-pressed", String(night));
+        try {
+          localStorage.setItem("writer-os-tone", tone);
+        } catch {
+        }
+      }
+
+      try {
+        const saved = localStorage.getItem("writer-os-tone");
+        if (saved === "night") {
+          setTone("night");
+        }
+      } catch {
+      }
+
+      toggle.addEventListener("click", () => {
+        setTone(root.dataset.tone === "night" ? "light" : "night");
+      });
+    })();
+  </script>
+</body>
+</html>

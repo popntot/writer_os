@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en" data-tone="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Writer OS - Close</title>
+  <link rel="stylesheet" href="../css/tokens.css">
+  <link rel="stylesheet" href="../css/primitives.css">
+</head>
+<body>
+  <main class="stage">
+    <section class="device" aria-label="Close screen">
+      <div class="screen">
+        <div class="chrome">
+          <span>Writer OS</span>
+          <button class="tone-toggle" type="button" aria-pressed="false">Night</button>
+        </div>
+
+        <div class="page-mark">Close / File</div>
+
+        <section class="view">
+          <div class="scroll">
+            <div class="measure">
+              <p class="label">Close</p>
+              <h1>Filed, still open</h1>
+              <p>Captured material is filed plainly so the next page can stay visible.</p>
+
+              <div class="close-stack">
+                <article class="filed-note">
+                  <span class="state active">Captured</span>
+                  <h3>Belonging without a ledger</h3>
+                  <p>Filed with wildfire clearing and elder visits as the Tuesday cases.</p>
+                </article>
+                <article class="filed-note">
+                  <span class="state open">Open</span>
+                  <h3>Visible contribution</h3>
+                  <p>Open question: how does a community notice work without ranking people?</p>
+                </article>
+                <article class="filed-note">
+                  <span class="state ready">Next</span>
+                  <h3>Article 1 page</h3>
+                  <p>Next page: cold read before another draft.</p>
+                </article>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <nav class="nav" aria-label="Reference navigation">
+          <a class="nav-link" href="today.html">Today</a>
+          <a class="nav-link" href="walk.html">Walk</a>
+          <a class="nav-link active" href="close.html">Close</a>
+          <a class="nav-link" href="article.html">Article</a>
+          <a class="nav-link" href="source.html">Source</a>
+          <a class="nav-link" href="system.html">System</a>
+        </nav>
+      </div>
+    </section>
+
+    <aside class="board" aria-label="Close reference notes">
+      <p class="label">Close screen</p>
+      <h2>Filing language only.</h2>
+      <p>The close reference uses captured, filed, open, and next language without claiming resolution.</p>
+    </aside>
+  </main>
+
+  <script>
+    (() => {
+      const root = document.documentElement;
+      const toggle = document.querySelector(".tone-toggle");
+
+      function setTone(tone) {
+        root.dataset.tone = tone;
+        const night = tone === "night";
+        toggle.textContent = night ? "Day" : "Night";
+        toggle.setAttribute("aria-pressed", String(night));
+        try {
+          localStorage.setItem("writer-os-tone", tone);
+        } catch {
+        }
+      }
+
+      try {
+        const saved = localStorage.getItem("writer-os-tone");
+        if (saved === "night") {
+          setTone("night");
+        }
+      } catch {
+      }
+
+      toggle.addEventListener("click", () => {
+        setTone(root.dataset.tone === "night" ? "light" : "night");
+      });
+    })();
+  </script>
+</body>
+</html>

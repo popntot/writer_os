@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en" data-tone="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Writer OS - Today</title>
+  <link rel="stylesheet" href="../css/tokens.css">
+  <link rel="stylesheet" href="../css/primitives.css">
+</head>
+<body>
+  <main class="stage">
+    <section class="device" aria-label="Today screen">
+      <div class="screen">
+        <div class="chrome">
+          <span>Writer OS</span>
+          <button class="tone-toggle" type="button" aria-pressed="false">Night</button>
+        </div>
+
+        <div class="page-mark" id="page-mark">Today / Walk 3</div>
+
+        <section class="view">
+          <div class="scroll">
+            <div class="measure">
+              <p class="label">Today</p>
+              <div class="date-lockup">
+                <span class="day">18</span>
+                <span class="meta">May<br>Walk-ready<br>08:40</span>
+              </div>
+
+              <div class="focus-switch" aria-label="Today mode">
+                <button class="focus-button active" type="button" data-mode="walk">Walk</button>
+                <button class="focus-button" type="button" data-mode="desk">Desk</button>
+              </div>
+
+              <div class="today-mode" data-panel="walk">
+                <h1>After Abundance</h1>
+                <p>One active question. Three quiet signals. Nothing else has the right to interrupt the walk.</p>
+
+                <div class="primary-question">
+                  <p>If money no longer assigns dignity, what does effort feel like on a Tuesday?</p>
+                </div>
+
+                <div class="quiet-list">
+                  <article class="quiet-row active">
+                    <span class="state active">Active</span>
+                    <h3>Article 1 cold read</h3>
+                    <p>The opener is not ready for revision until it has been read slowly.</p>
+                  </article>
+                  <article class="quiet-row open">
+                    <span class="state open">Open</span>
+                    <h3>Work after coercion</h3>
+                    <p>Stay with the felt life before reaching for architecture.</p>
+                  </article>
+                  <article class="quiet-row ready">
+                    <span class="state ready">Ready</span>
+                    <h3>No scoreboard</h3>
+                    <p>The ledger answer has been retired as the default frame.</p>
+                  </article>
+                </div>
+              </div>
+
+              <div class="today-mode hidden" data-panel="desk">
+                <h1>Desk page</h1>
+                <p>The desk surface can hold a short reading order because the work is slower.</p>
+
+                <div class="work-index">
+                  <div class="index-row active">
+                    <span class="number">01</span>
+                    <p>Read Article 1 draft 2 without editing it.</p>
+                    <span class="mark">Active</span>
+                  </div>
+                  <div class="index-row source">
+                    <span class="number">02</span>
+                    <p>Review lineage candidates for Article 0.</p>
+                    <span class="mark">Source</span>
+                  </div>
+                  <div class="index-row open">
+                    <span class="number">03</span>
+                    <p>Desk-test "starter packs, not manifesto."</p>
+                    <span class="mark">Open</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <nav class="nav" aria-label="Reference navigation">
+          <a class="nav-link active" href="today.html">Today</a>
+          <a class="nav-link" href="walk.html">Walk</a>
+          <a class="nav-link" href="close.html">Close</a>
+          <a class="nav-link" href="article.html">Article</a>
+          <a class="nav-link" href="source.html">Source</a>
+          <a class="nav-link" href="system.html">System</a>
+        </nav>
+      </div>
+    </section>
+
+    <aside class="board" aria-label="Today reference notes">
+      <p class="label">Today page</p>
+      <h2>One question gets the walk.</h2>
+      <p>The Today surface uses a date lockup, a Walk/Desk switch, one primary question, and three or fewer quiet rows.</p>
+    </aside>
+  </main>
+
+  <script>
+    (() => {
+      const root = document.documentElement;
+      const toggle = document.querySelector(".tone-toggle");
+      const modeButtons = Array.from(document.querySelectorAll(".focus-button"));
+      const modePanels = Array.from(document.querySelectorAll(".today-mode"));
+      const marker = document.querySelector("#page-mark");
+
+      function setTone(tone) {
+        root.dataset.tone = tone;
+        const night = tone === "night";
+        toggle.textContent = night ? "Day" : "Night";
+        toggle.setAttribute("aria-pressed", String(night));
+        try {
+          localStorage.setItem("writer-os-tone", tone);
+        } catch {
+        }
+      }
+
+      function setMode(mode) {
+        modeButtons.forEach((button) => button.classList.toggle("active", button.dataset.mode === mode));
+        modePanels.forEach((panel) => panel.classList.toggle("hidden", panel.dataset.panel !== mode));
+        marker.textContent = mode === "desk" ? "Today / Desk" : "Today / Walk 3";
+      }
+
+      try {
+        const saved = localStorage.getItem("writer-os-tone");
+        if (saved === "night") {
+          setTone("night");
+        }
+      } catch {
+      }
+
+      toggle.addEventListener("click", () => {
+        setTone(root.dataset.tone === "night" ? "light" : "night");
+      });
+
+      modeButtons.forEach((button) => {
+        button.addEventListener("click", () => setMode(button.dataset.mode));
+      });
+    })();
+  </script>
+</body>
+</html>

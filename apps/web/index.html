@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en" data-tone="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Writer OS - Web Reference</title>
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/primitives.css">
+</head>
+<body>
+  <main class="stage">
+    <section class="device" aria-label="Writer OS web reference index">
+      <div class="screen">
+        <div class="chrome">
+          <span>Writer OS</span>
+          <button class="tone-toggle" type="button" aria-pressed="false">Night</button>
+        </div>
+
+        <div class="page-mark">Reference / Index</div>
+
+        <section class="view">
+          <div class="scroll">
+            <div class="measure">
+              <p class="label">Screens</p>
+              <h1>Reference oracle</h1>
+              <p>Six static pages render the locked minimal editorial direction without a build step.</p>
+
+              <nav class="screen-list" aria-label="Reference screens">
+                <a href="screens/today.html">
+                  <span class="screen-list-label">Today</span>
+                  <div>
+                    <h3>Walk-ready page</h3>
+                    <p>Date lockup, mode switch, primary question, and three quiet signals.</p>
+                  </div>
+                </a>
+                <a href="screens/walk.html">
+                  <span class="screen-list-label">Walk</span>
+                  <div>
+                    <h3>Capture surface</h3>
+                    <p>Timer, one captured thought, and a minimal capture control.</p>
+                  </div>
+                </a>
+                <a href="screens/close.html">
+                  <span class="screen-list-label">Close</span>
+                  <div>
+                    <h3>Filed page</h3>
+                    <p>Captured note, open question, and next page.</p>
+                  </div>
+                </a>
+                <a href="screens/article.html">
+                  <span class="screen-list-label">Article</span>
+                  <div>
+                    <h3>Prose-led outline</h3>
+                    <p>Title, lede, document weather, and outline beats.</p>
+                  </div>
+                </a>
+                <a href="screens/source.html">
+                  <span class="screen-list-label">Source</span>
+                  <div>
+                    <h3>Source margin</h3>
+                    <p>Source codes, blockquotes, and short contextual notes.</p>
+                  </div>
+                </a>
+                <a href="screens/system.html">
+                  <span class="screen-list-label">System</span>
+                  <div>
+                    <h3>Rules of restraint</h3>
+                    <p>Token examples, state examples, and implementation rules.</p>
+                  </div>
+                </a>
+              </nav>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <aside class="board" aria-label="Design system board">
+      <p class="label">Reference oracle</p>
+      <h2>Severe, quiet, almost invisible.</h2>
+      <p>The web playground is pure static HTML and CSS. It exists so iOS, DS-3, DS-4, and DS-5 can compare against the same visual reference.</p>
+
+      <div class="palette-line" aria-label="Signal palette">
+        <div class="tone">Ground</div>
+        <div class="tone">Active</div>
+        <div class="tone">Ready</div>
+        <div class="tone">Source</div>
+        <div class="tone">Open</div>
+      </div>
+
+      <span class="screen-list-meta">No framework / no build / disposable</span>
+    </aside>
+  </main>
+
+  <script>
+    (() => {
+      const root = document.documentElement;
+      const toggle = document.querySelector(".tone-toggle");
+
+      function setTone(tone) {
+        root.dataset.tone = tone;
+        const night = tone === "night";
+        toggle.textContent = night ? "Day" : "Night";
+        toggle.setAttribute("aria-pressed", String(night));
+        try {
+          localStorage.setItem("writer-os-tone", tone);
+        } catch {
+        }
+      }
+
+      try {
+        const saved = localStorage.getItem("writer-os-tone");
+        if (saved === "night") {
+          setTone("night");
+        }
+      } catch {
+      }
+
+      toggle.addEventListener("click", () => {
+        setTone(root.dataset.tone === "night" ? "light" : "night");
+      });
+    })();
+  </script>
+</body>
+</html>

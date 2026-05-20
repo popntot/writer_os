@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en" data-tone="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Writer OS - Source</title>
+  <link rel="stylesheet" href="../css/tokens.css">
+  <link rel="stylesheet" href="../css/primitives.css">
+</head>
+<body>
+  <main class="stage">
+    <section class="device" aria-label="Source screen">
+      <div class="screen">
+        <div class="chrome">
+          <span>Writer OS</span>
+          <button class="tone-toggle" type="button" aria-pressed="false">Night</button>
+        </div>
+
+        <div class="page-mark">Source / Raw</div>
+
+        <section class="view">
+          <div class="scroll">
+            <div class="measure">
+              <p class="label">Source</p>
+              <h1>Source as margin</h1>
+              <p>Raw material appears as a sequence of quiet excerpts. The interface does not turn it into an inbox.</p>
+
+              <article class="source-note">
+                <span class="state source">SRC 01</span>
+                <blockquote>Starter packs, not manifesto.</blockquote>
+                <p>Promising, late-walk, still needs desk testing.</p>
+              </article>
+              <article class="source-note">
+                <span class="state source">SRC 02</span>
+                <blockquote>Hopkins-as-host is practice, not theory.</blockquote>
+                <p>Useful for Article 0 if it survives a cold read.</p>
+              </article>
+              <article class="source-note">
+                <span class="state open">SRC 03</span>
+                <blockquote>No scoreboard closes off the easy answer.</blockquote>
+                <p>This pressures the preference-layer question.</p>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <nav class="nav" aria-label="Reference navigation">
+          <a class="nav-link" href="today.html">Today</a>
+          <a class="nav-link" href="walk.html">Walk</a>
+          <a class="nav-link" href="close.html">Close</a>
+          <a class="nav-link" href="article.html">Article</a>
+          <a class="nav-link active" href="source.html">Source</a>
+          <a class="nav-link" href="system.html">System</a>
+        </nav>
+      </div>
+    </section>
+
+    <aside class="board" aria-label="Source reference notes">
+      <p class="label">Source screen</p>
+      <h2>Cited marginalia.</h2>
+      <p>The source reference uses codes, blockquotes, and one-line notes instead of a file list or inbox.</p>
+    </aside>
+  </main>
+
+  <script>
+    (() => {
+      const root = document.documentElement;
+      const toggle = document.querySelector(".tone-toggle");
+
+      function setTone(tone) {
+        root.dataset.tone = tone;
+        const night = tone === "night";
+        toggle.textContent = night ? "Day" : "Night";
+        toggle.setAttribute("aria-pressed", String(night));
+        try {
+          localStorage.setItem("writer-os-tone", tone);
+        } catch {
+        }
+      }
+
+      try {
+        const saved = localStorage.getItem("writer-os-tone");
+        if (saved === "night") {
+          setTone("night");
+        }
+      } catch {
+      }
+
+      toggle.addEventListener("click", () => {
+        setTone(root.dataset.tone === "night" ? "light" : "night");
+      });
+    })();
+  </script>
+</body>
+</html>
