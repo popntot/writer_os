@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en" data-tone="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Writer OS - System</title>
+  <link rel="stylesheet" href="../css/tokens.css">
+  <link rel="stylesheet" href="../css/primitives.css">
+</head>
+<body>
+  <main class="stage">
+    <section class="device" aria-label="System screen">
+      <div class="screen">
+        <div class="chrome">
+          <span>Writer OS</span>
+          <button class="tone-toggle" type="button" aria-pressed="false">Night</button>
+        </div>
+
+        <div class="page-mark">System / Rules</div>
+
+        <section class="view">
+          <div class="scroll">
+            <div class="measure">
+              <p class="label">System</p>
+              <h1>Rules of restraint</h1>
+              <p>This direction gets its personality from what it refuses: no cards, no assistant mascot, no heavy chrome.</p>
+
+              <div class="system-note">
+                <div class="spec-row">
+                  <span class="spec-key">Tokens</span>
+                  <p><span class="state active">Active</span> <span class="state ready">Ready</span> <span class="state source">Source</span> <span class="state open">Open</span></p>
+                </div>
+                <div class="spec-row">
+                  <span class="spec-key">Type</span>
+                  <p>Serif prose and page titles; mono metadata and state labels.</p>
+                </div>
+                <div class="spec-row">
+                  <span class="spec-key">Rules</span>
+                  <p>Hairline separation carries structure before color does.</p>
+                </div>
+                <div class="spec-row">
+                  <span class="spec-key">AI</span>
+                  <p>Never personified. Intelligence appears as prioritization.</p>
+                </div>
+              </div>
+
+              <div class="type-ladder">
+                <div class="type-line large">A composed page, not a dashboard.</div>
+                <div class="type-line body">Body copy carries the project. Controls stay subordinate to reading.</div>
+                <div class="type-line meta">Metadata / 10px mono / wide track</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <nav class="nav" aria-label="Reference navigation">
+          <a class="nav-link" href="today.html">Today</a>
+          <a class="nav-link" href="walk.html">Walk</a>
+          <a class="nav-link" href="close.html">Close</a>
+          <a class="nav-link" href="article.html">Article</a>
+          <a class="nav-link" href="source.html">Source</a>
+          <a class="nav-link active" href="system.html">System</a>
+        </nav>
+      </div>
+    </section>
+
+    <aside class="board" aria-label="System reference notes">
+      <p class="label">System page</p>
+      <h2>Rules visible in the app language.</h2>
+      <p>The system reference exposes token, type, state, and restraint examples without leaving the editorial surface.</p>
+    </aside>
+  </main>
+
+  <script>
+    (() => {
+      const root = document.documentElement;
+      const toggle = document.querySelector(".tone-toggle");
+
+      function setTone(tone) {
+        root.dataset.tone = tone;
+        const night = tone === "night";
+        toggle.textContent = night ? "Day" : "Night";
+        toggle.setAttribute("aria-pressed", String(night));
+        try {
+          localStorage.setItem("writer-os-tone", tone);
+        } catch {
+        }
+      }
+
+      try {
+        const saved = localStorage.getItem("writer-os-tone");
+        if (saved === "night") {
+          setTone("night");
+        }
+      } catch {
+      }
+
+      toggle.addEventListener("click", () => {
+        setTone(root.dataset.tone === "night" ? "light" : "night");
+      });
+    })();
+  </script>
+</body>
+</html>

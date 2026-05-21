@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en" data-tone="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Writer OS - Walk</title>
+  <link rel="stylesheet" href="../css/tokens.css">
+  <link rel="stylesheet" href="../css/primitives.css">
+</head>
+<body>
+  <main class="stage">
+    <section class="device" aria-label="Walk screen">
+      <div class="screen">
+        <div class="chrome">
+          <span>Writer OS</span>
+          <button class="tone-toggle" type="button" aria-pressed="false">Night</button>
+        </div>
+
+        <div class="page-mark">Walk / Capture</div>
+
+        <section class="view">
+          <div class="scroll">
+            <div class="measure walk-sheet">
+              <div>
+                <p class="label">Walk</p>
+                <div class="timer">27:14</div>
+              </div>
+
+              <div class="captured-thought">
+                <span class="state active">Captured</span>
+                <p>Work might be where belonging becomes visible, provided visibility does not become a score.</p>
+              </div>
+
+              <button class="control-line" type="button"><span>Capture</span></button>
+            </div>
+          </div>
+        </section>
+
+        <nav class="nav" aria-label="Reference navigation">
+          <a class="nav-link" href="today.html">Today</a>
+          <a class="nav-link active" href="walk.html">Walk</a>
+          <a class="nav-link" href="close.html">Close</a>
+          <a class="nav-link" href="article.html">Article</a>
+          <a class="nav-link" href="source.html">Source</a>
+          <a class="nav-link" href="system.html">System</a>
+        </nav>
+      </div>
+    </section>
+
+    <aside class="board" aria-label="Walk reference notes">
+      <p class="label">Walk screen</p>
+      <h2>The calmest surface.</h2>
+      <p>The walk reference keeps only the timer, captured thought, and capture line visible.</p>
+    </aside>
+  </main>
+
+  <script>
+    (() => {
+      const root = document.documentElement;
+      const toggle = document.querySelector(".tone-toggle");
+
+      function setTone(tone) {
+        root.dataset.tone = tone;
+        const night = tone === "night";
+        toggle.textContent = night ? "Day" : "Night";
+        toggle.setAttribute("aria-pressed", String(night));
+        try {
+          localStorage.setItem("writer-os-tone", tone);
+        } catch {
+        }
+      }
+
+      try {
+        const saved = localStorage.getItem("writer-os-tone");
+        if (saved === "night") {
+          setTone("night");
+        }
+      } catch {
+      }
+
+      toggle.addEventListener("click", () => {
+        setTone(root.dataset.tone === "night" ? "light" : "night");
+      });
+    })();
+  </script>
+</body>
+</html>
