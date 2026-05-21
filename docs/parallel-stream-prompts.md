@@ -27,12 +27,62 @@ Zero file overlap between A and B. Merge order doesn't matter; merge as each cle
 
 ## Deferred (claude-native or next iteration)
 
-- **DS-2/3/4/5** (#43, #44, #45, #46) — wait on DS-1 to land.
 - **#16, #17** (OpenQuestions, ArtifactGenerator + iOS read views) — wait on DS-1 so new screens use design-system primitives.
 - **#19** (OutOfSyncDetector + project-card chip) — chip lives in card that DS-3 will reskin; defer to avoid touching same area twice.
 - **#20** (offline PTT/capture) — heavy iOS UI; wait on DS-3.
-- **#21** (audio tiering) — pure backend, viable as a Stream C; held back to keep first v2 iteration to 2 streams.
-- **#13, #14, #15** (PDF / voice-memo / URL source types) — additive but each touches the same source-ingestion pipeline; will pick up next iteration.
+- **#21** (audio tiering) — pure backend, viable as a Stream D in iter 3.
+- **#13, #14, #15** (PDF / voice-memo / URL source types) — additive but each touches the same source-ingestion pipeline; will pick up after the design-system reskin completes.
+
+## Iteration 2 — planned (base `a42170c`)
+
+Drafted by Queen (Claude Code session) on 2026-05-21. **Not yet dispatched** — prompt files written, Codex workers not yet spawned. User dispatches via `codex-companion.mjs` per the worker-progress section below.
+
+### Stream A — DS-3 Today + Walk reskin `[codex-able]` (planned)
+
+- **Issue:** [#44](https://github.com/popntot/writer_os/issues/44)
+- **Prompt:** [`docs/streams/stream-a-ds-3-today-walk.prompt.md`](streams/stream-a-ds-3-today-walk.prompt.md)
+- **Worktree:** `../writer_os-stream-a`, branch `stream-a-ds-3-today-walk`
+- **Effort:** high (iOS view-layer rewrite + snapshot suite)
+- **Touches:** `apps/ios/WriterOS/ProjectsView.swift`, `apps/ios/WriterOS/ChatView.swift` (voice-mode branch only), new `apps/ios/WriterOSTests/DesignSystem/Today*.swift` + `WalkSurface*.swift`. **Does not touch** VoiceSessionController / AudioPlaybackEngine / SSEStreamConsumer.
+
+### Stream B — DS-4 Close + System reskin `[codex-able]` (planned)
+
+- **Issue:** [#45](https://github.com/popntot/writer_os/issues/45)
+- **Prompt:** [`docs/streams/stream-b-ds-4-close-system.prompt.md`](streams/stream-b-ds-4-close-system.prompt.md)
+- **Worktree:** `../writer_os-stream-b`, branch `stream-b-ds-4-close-system`
+- **Effort:** high (Close UI rewrite + new SystemView subsuming three existing views)
+- **Touches:** `apps/ios/WriterOS/SessionEndCoordinator.swift` (UI layer only), new `apps/ios/WriterOS/SystemView.swift`, optional shim or deletion of `SettingsView.swift` / `ConfigSetupView.swift` / `DumpView.swift`. **Does not touch** `SettingsStore.swift` / `Settings.swift`.
+
+### Stream C — Vitest hookTimeout (PGlite cold-parallel flake) `[queen-executed]` ✅ merged `ba916e5`
+
+- **Issue:** [#52](https://github.com/popntot/writer_os/issues/52) (closed)
+- **Prompt:** [`docs/streams/stream-c-vitest-hooktimeout.prompt.md`](streams/stream-c-vitest-hooktimeout.prompt.md) (kept for record; not consumed by Codex this run)
+- **Worker:** Queen (Claude Code session) — diff was small enough to land without Codex sandbox.
+- **Effort:** low (4 config files, +2 lines each).
+- **Touched:** `apps/api/vitest.config.ts`, `packages/db/vitest.config.ts`, `packages/inbox/vitest.config.ts`, `packages/consolidation/vitest.config.ts`. `hookTimeout: 30_000` + `testTimeout: 15_000`. `llm/` and `tts/` left untouched (no PGlite there).
+- **Verification:** 5× cold-cache `pnpm turbo run test --force` all green (18s / 20s / 17s / 17s / 19s).
+
+### Bonus iter-2 landings (PRs that were ready, not new dispatches)
+
+- **PR [#49](https://github.com/popntot/writer_os/pull/49)** (DS-2 web playground, closes #43) merged into main as **`00f4b3a1`**. 11 files under `apps/web/` + handoff doc. No new dispatch needed.
+- **PR #48** (stale DS-1) closed as superseded by `213ebb2`.
+- **PR #50** (stale iter-3 docs) closed as superseded.
+- **PR #39** (stale session-7 docs) closed as superseded.
+
+### Coordination
+
+Zero file overlap across A, B, C. A and B both compose DS-1 primitives but in different views. C is config-only. Merge order: C first (smallest, unblocks reliable CI), then A and B in either order.
+
+### Open in-flight PRs to triage before dispatch
+
+| PR | Branch | Status | Recommendation |
+|---|---|---|---|
+| #48 | `tracer/ds-1-design-system-foundation` | CONFLICTING — content already in main via `213ebb2` re-author | Close as superseded |
+| #49 | `stream-b-ds-2-web-playground` | MERGEABLE/CLEAN — DS-2 (#43) work, 1608 lines, closes #43 | Review + merge; counts as iter-2 DS-2 landing without a fresh dispatch |
+| #50 | `docs/iteration-3-streams` | CONFLICTING — iter-3 docs superseded by current iter-1 docs | Close as superseded |
+| #39 | `docs/session-7-parallel-streams-v2` | CONFLICTING — older session docs | Close as superseded (or rebase if any prose worth preserving) |
+
+PR #49 closing #43 means **DS-2 will be done after this iteration without a Stream D for it**. Confirms the deferred list above (DS-2 removed from "deferred" because PR #49 already covers it).
 
 ## How to read worker progress
 
