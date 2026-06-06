@@ -267,6 +267,21 @@ source state, quote at 21pt serif, context at 13.5pt serif.
 
 Must not: become a file list, upload inbox, card, checkbox row, or generic source manager.
 
+### SystemSpecRow
+
+Responsibility: render System-page settings and read-only implementation facts as measured
+label/title/body/value rows with an optional native control slot.
+
+Required inputs: short mono label, serif title, one-sentence body, optional terse value, and
+optional control content.
+
+Visual constraints: label uses StateLabel grammar; title uses row-title serif; body uses
+supporting serif; value uses mono metadata; row padding follows space-3; each row ends with
+a hairline rule.
+
+Must not: become a card, dashboard metric, generic form section, icon row, segmented
+control, or container for unrelated actions.
+
 ### BottomNav
 
 Responsibility: render the app navigation as a six-tab bottom text rail.
@@ -327,4 +342,3 @@ Before shipping a screen, verify:
 - Icons or image assets.
 - Web port.
 - Reskinning existing iOS screens in DS-1.
-

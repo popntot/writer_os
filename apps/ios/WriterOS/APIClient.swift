@@ -44,6 +44,13 @@ actor APIClient {
         return try JSONDecoder().decode(Project.self, from: data)
     }
 
+    func getTrueLine(projectId: String) async throws -> TrueLineDocument {
+        let request = makeRequest(path: "/projects/\(projectId)/trueline", method: "GET")
+        let (data, response) = try await perform(request)
+        try Self.assertStatus(response, expected: 200, data: data)
+        return try JSONDecoder().decode(TrueLineDocument.self, from: data)
+    }
+
     func createSession(projectId: UUID, targetArticleId: UUID? = nil) async throws -> Session {
         var request = makeRequest(path: "/projects/\(projectId.uuidString)/sessions", method: "POST")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
