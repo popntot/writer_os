@@ -20,6 +20,7 @@ struct ChatView: View {
     @State private var didStartSession = false
     @State private var errorMessage: String?
     @State private var showDebugChat = false
+    @State private var showClose = false
 
     init(projectId: UUID) {
         self.projectId = projectId
@@ -44,31 +45,57 @@ struct ChatView: View {
     }
 
     var body: some View {
-        walkScreen
+        if showClose {
+            // The walk has ended; file it on the Close surface (DS-4) before
+            // returning to Today. The session was already ended by the coordinator.
+            CloseSurface(
+                capturedNote: closeCapturedNote,
+                openQuestion: nil,
+                nextTitle: "Next walk",
+                nextBody: "Pick this thread up when you return.",
+                onReturn: { dismiss() },
+            )
             .navigationBarBackButtonHidden(true)
             .toolbar(.hidden, for: .navigationBar)
-            .gesture(exitWalkGesture)
-            .task {
-                guard !didStartSession else { return }
-                didStartSession = true
-                await startSession()
-            }
-            .onDisappear {
-                sessionEndCoordinator.cancel()
-            }
-            .alert(
-                "Error",
-                isPresented: Binding(
-                    get: { errorMessage != nil },
-                    set: { if !$0 { errorMessage = nil } },
-                ),
-            ) {
-                Button("OK", role: .cancel) { errorMessage = nil }
-            } message: {
-                Text(errorMessage ?? "")
-            }
-            .modifier(DebugChatModifier(isPresented: $showDebugChat) { debugChat })
-            .modifier(DebugChatOpenGesture(isPresented: $showDebugChat))
+        } else {
+            walkScreen
+                .navigationBarBackButtonHidden(true)
+                .toolbar(.hidden, for: .navigationBar)
+                .gesture(exitWalkGesture)
+                .task {
+                    guard !didStartSession else { return }
+                    didStartSession = true
+                    await startSession()
+                }
+                .onDisappear {
+                    sessionEndCoordinator.cancel()
+                }
+                .alert(
+                    "Error",
+                    isPresented: Binding(
+                        get: { errorMessage != nil },
+                        set: { if !$0 { errorMessage = nil } },
+                    ),
+                ) {
+                    Button("OK", role: .cancel) { errorMessage = nil }
+                } message: {
+                    Text(errorMessage ?? "")
+                }
+                .modifier(DebugChatModifier(isPresented: $showDebugChat) { debugChat })
+                .modifier(DebugChatOpenGesture(isPresented: $showDebugChat))
+        }
+    }
+
+    // The open question and next-session starter come from ConsolidationWorker
+    // output, which isn't exposed to the client yet (parallels the Walk
+    // question gap, #16). Until then the captured note carries the Close
+    // surface and the rest uses calm, file-not-finish defaults.
+    private var closeCapturedNote: String {
+        if let lastUtterance = messages.last(where: { $0.role == "user" })?.text,
+           !lastUtterance.isEmpty {
+            return lastUtterance
+        }
+        return "Filed for the next walk."
     }
 
     // MARK: - Walk surface (voice-primary)
@@ -189,7 +216,9 @@ struct ChatView: View {
                     _ = try await client.endSession(sessionId: createdSession.id)
                 },
                 onDismiss: {
-                    dismiss()
+                    // End of walk → file it on the Close surface, then Return
+                    // dismisses back to Today.
+                    showClose = true
                 },
                 onError: { error in
                     errorMessage = error.localizedDescription
