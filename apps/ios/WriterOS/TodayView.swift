@@ -23,36 +23,48 @@ struct TodaySurface: View {
     let inboxCount: Int
     let hasUnreviewed: Bool
 
+    /// The live screen scrolls so a long project list (plus the Captured /
+    /// New-project rows) never clips. Snapshots render the non-scrolling column,
+    /// which lays out identically for non-overflowing fixtures and, unlike a
+    /// ScrollView, renders under the test harness's `drawHierarchy`.
+    var scrollable: Bool = false
+
     var onSelectMode: (WriterMode) -> Void = { _ in }
     var onTapInbox: () -> Void = {}
     var onTapNewProject: () -> Void = {}
     var onBeginWalk: () -> Void = {}
 
     var body: some View {
-        // Today is a deliberately low-density surface (date, mode switch, title,
-        // a short reading order, ≤ a couple of quiet rows), so it composes as a
-        // plain top-aligned column rather than a scroll view.
         PageShell(pageMark: "Today") {
-            VStack(alignment: .leading, spacing: WriterSpacing.space4) {
-                StateLabel(dateText)
-
-                ModeSwitch(selectedMode: mode, onSelect: onSelectMode)
-
-                Text(title)
-                    .font(WriterTypography.pageTitle)
-                    .foregroundStyle(WriterColors.ink)
-                    .lineSpacing(2)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                switch mode {
-                case .walk:
-                    walkBody
-                case .desk:
-                    deskBody
-                }
+            if scrollable {
+                ScrollView { column }
+            } else {
+                column
             }
         }
+    }
+
+    private var column: some View {
+        VStack(alignment: .leading, spacing: WriterSpacing.space4) {
+            StateLabel(dateText)
+
+            ModeSwitch(selectedMode: mode, onSelect: onSelectMode)
+
+            Text(title)
+                .font(WriterTypography.pageTitle)
+                .foregroundStyle(WriterColors.ink)
+                .lineSpacing(2)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            switch mode {
+            case .walk:
+                walkBody
+            case .desk:
+                deskBody
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
@@ -121,6 +133,7 @@ struct TodayView: View {
                 walkQuestion: walkQuestion,
                 inboxCount: inboxStore.unreviewedCount,
                 hasUnreviewed: inboxStore.hasUnreviewed,
+                scrollable: true,
                 onSelectMode: { modeRaw = $0.rawValue },
                 onTapInbox: { path.append(TodayRoute.inbox) },
                 onTapNewProject: { showCreate = true },

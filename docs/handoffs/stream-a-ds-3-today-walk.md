@@ -46,16 +46,28 @@ Branch: `issue/44-ds3-today-walk`. Base: `main` @ `d45a1d6`.
 2. **Walk-mode `PrimaryQuestion` is always the soft empty state** ("Nothing waiting.
    Begin.") — there is no iOS OpenQuestions surface yet (#16). The seam (`walkQuestion`)
    is ready to read a real open question once that lands.
-3. **Today is non-scrolling.** A `ScrollView` inside the snapshot harness renders
-   empty (`drawHierarchy` deferral), and Today is a deliberately low-density surface,
-   so it's a plain top-aligned column. Long project lists would overflow — add
-   scoped scrolling if that becomes real.
+3. **Today scrolls in the app; snapshots render the non-scrolling column.**
+   `TodaySurface(scrollable:)` wraps the column in a `ScrollView` for the live
+   screen (so long project lists + the Captured/New rows never clip), while
+   snapshots use the default non-scrolling path — a `ScrollView` renders empty
+   under the harness's `drawHierarchy`, and the layout is identical for
+   non-overflowing fixtures. (Added in response to Codex review P2.)
 4. **Today has no error chrome.** Load failures fall back to the empty state and
    recover on pull-to-refresh, keeping the surface calm (vs. the old Retry panel).
 5. **Navigation shell unchanged.** The `RootView` `TabView` (Today / Dump / Settings)
    stays; rewiring the six-tab DS `BottomNav` (Today/Walk/Close/Article/Source/System)
    is DS-4+ work. The Today "Captured" row and the Dump tab are briefly redundant
    until then.
+
+## Codex review
+
+Ran `/codex:review` (native reviewer, branch diff vs `main`). Two P2 findings,
+both fixed in a follow-up commit; it did not object to the WorkIndex extension:
+
+- Today clipped on overflow → `TodaySurface` now scrolls in the app (decision 3).
+- `InboxStore.reload` could drop a post-mutation refresh during an in-flight load
+  → replaced the `isLoading` skip-guard with a monotonic sequence token, so a
+  refresh is never dropped and only the latest result wins.
 
 ## Verified
 
