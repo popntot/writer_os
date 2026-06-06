@@ -1,4 +1,4 @@
-import Foundation
+import SwiftUI
 
 @MainActor
 protocol SessionEndTimer: AnyObject {
@@ -115,5 +115,79 @@ private final class TaskSessionEndTimer: SessionEndTimer {
 
     func cancel() {
         task.cancel()
+    }
+}
+
+struct CloseSurface: View {
+    let capturedNote: String
+    let openQuestion: String?
+    let nextTitle: String
+    let nextBody: String
+    var onReturn: () -> Void = {}
+
+    var body: some View {
+        PageShell(pageMark: "Close") {
+            VStack(alignment: .leading, spacing: WriterSpacing.space5) {
+                StateLabel("Filed", state: .ready)
+
+                capturedBlock
+
+                if let openQuestion, !openQuestion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    PrimaryQuestion(openQuestion)
+                }
+
+                QuietRow(
+                    state: .ready,
+                    stateLabel: "Next",
+                    title: nextTitle,
+                    body: nextBody,
+                )
+
+                Spacer(minLength: WriterSpacing.space5)
+
+                returnButton
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+    }
+
+    private var capturedBlock: some View {
+        VStack(alignment: .leading, spacing: WriterSpacing.space2) {
+            StateLabel("Captured note", state: .active)
+
+            Text(capturedNote)
+                .font(WriterTypography.body)
+                .foregroundStyle(WriterColors.ink)
+                .lineSpacing(7.2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.vertical, WriterSpacing.space3)
+        .overlay(alignment: .bottom) {
+            Hairline(.hairline)
+        }
+    }
+
+    private var returnButton: some View {
+        Button(action: onReturn) {
+            VStack(spacing: 0) {
+                Hairline(.ink)
+
+                HStack(spacing: 0) {
+                    Hairline(.ink, axis: .vertical)
+
+                    Text("RETURN")
+                        .font(WriterTypography.metadata)
+                        .tracking(WriterTypography.tracking(em: 0.12, size: 9))
+                        .foregroundStyle(WriterColors.ink)
+                        .frame(maxWidth: .infinity, minHeight: WriterSpacing.bottomNavHeight)
+
+                    Hairline(.ink, axis: .vertical)
+                }
+
+                Hairline(.ink)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Return")
     }
 }
