@@ -5,17 +5,23 @@ struct WorkIndexItem: Identifiable {
     let text: String
     let state: WriterState
     let mark: String
+    /// Optional tap action. The index stays a reading order, never a task list —
+    /// when set, the row only becomes a quiet navigation target (no checkbox,
+    /// no chrome). Nil leaves the row non-interactive, matching DS-1 usage.
+    let onSelect: (() -> Void)?
 
     init(
         id: String = UUID().uuidString,
         text: String,
         state: WriterState,
-        mark: String
+        mark: String,
+        onSelect: (() -> Void)? = nil
     ) {
         self.id = id
         self.text = text
         self.state = state
         self.mark = mark
+        self.onSelect = onSelect
     }
 }
 
@@ -55,6 +61,8 @@ struct WorkIndex: View {
                 .overlay(alignment: .bottom) {
                     Hairline(.hairline)
                 }
+                .contentShape(Rectangle())
+                .onTapGesture { item.onSelect?() }
             }
         }
     }

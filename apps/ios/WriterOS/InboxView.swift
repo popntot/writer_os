@@ -3,12 +3,17 @@ import SwiftUI
 @MainActor
 struct InboxView: View {
     @EnvironmentObject private var configStore: AppConfigStore
+    @EnvironmentObject private var inboxStore: InboxStore
     @State private var draft = ""
     @State private var projects: [Project] = []
-    @State private var pendingItems: [InboxItem] = []
     @State private var isSubmitting = false
-    @State private var isLoading = false
+    @State private var isLoadingProjects = false
     @State private var errorMessage: String?
+
+    // Pending items live in the shared InboxStore so the Today "Captured" count
+    // reflects filings/deposits the moment they happen here.
+    private var pendingItems: [InboxItem] { inboxStore.pendingItems }
+    private var isLoading: Bool { inboxStore.isLoading || isLoadingProjects }
 
     var body: some View {
         NavigationStack {
@@ -84,50 +89,44 @@ struct InboxView: View {
             ?? projectId.uuidString
     }
 
-    private func makeClient() throws -> APIClient {
-        guard let config = configStore.config else {
-            throw APIError.unauthorized
-        }
-        return APIClient(config: config)
-    }
-
     private func reload() async {
-        isLoading = true
-        defer { isLoading = false }
-
+        guard let config = configStore.config else {
+            errorMessage = APIError.unauthorized.localizedDescription
+            return
+        }
+        isLoadingProjects = true
         do {
-            let client = try makeClient()
-            async let loadedProjects = client.listProjects()
-            async let loadedPending = client.listPendingInbox()
-            projects = try await loadedProjects
-            pendingItems = try await loadedPending
+            let client = APIClient(config: config)
+            projects = try await client.listProjects()
         } catch {
             errorMessage = error.localizedDescription
+        }
+        isLoadingProjects = false
+        await inboxStore.reload(config: config)
+        if let storeError = inboxStore.errorMessage {
+            errorMessage = storeError
         }
     }
 
     private func submitDump() async {
         let content = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !content.isEmpty else { return }
+        guard !content.isEmpty, let config = configStore.config else { return }
 
         isSubmitting = true
         defer { isSubmitting = false }
 
         do {
-            let client = try makeClient()
-            _ = try await client.depositInbox(content: content, surface: "ios-app-dump")
+            try await inboxStore.deposit(config: config, content: content, surface: "ios-app-dump")
             draft = ""
-            await reload()
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
     private func confirm(_ item: InboxItem, projectId: UUID) async {
+        guard let config = configStore.config else { return }
         do {
-            let client = try makeClient()
-            _ = try await client.confirmInboxItem(item.id, projectId: projectId)
-            await reload()
+            try await inboxStore.confirm(config: config, item: item, projectId: projectId)
         } catch {
             errorMessage = error.localizedDescription
         }
