@@ -19,7 +19,7 @@ struct InboxView: View {
         NavigationStack {
             List {
                 Section("Dump") {
-                    DumpView(
+                    InboxDumpComposer(
                         text: $draft,
                         isSubmitting: isSubmitting,
                         onSubmit: submitDump,
