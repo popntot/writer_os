@@ -1,6 +1,12 @@
 import SwiftUI
 
 struct DumpView: View {
+    var body: some View {
+        SystemView()
+    }
+}
+
+struct InboxDumpComposer: View {
     @Binding var text: String
     let isSubmitting: Bool
     let onSubmit: () async -> Void
